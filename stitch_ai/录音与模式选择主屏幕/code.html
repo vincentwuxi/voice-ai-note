@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>录音与模式选择主屏幕</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2b7cee",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101822",
+                    },
+                    fontFamily: {
+                        "display": ["Inter", "Noto Sans SC", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+        .glass-panel {
+            background: rgba(16, 24, 34, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .breathing-glow {
+            box-shadow: 0 0 20px 2px rgba(43, 124, 238, 0.4);
+        }
+        .waveform-bar {
+            width: 4px;
+            border-radius: 2px;
+            background: #2b7cee;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display text-white">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden bg-background-dark">
+<!-- TopAppBar: iCloud Status -->
+<header class="flex items-center px-6 pt-12 pb-4 justify-between glass-panel sticky top-0 z-50">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[20px]">cloud_done</span>
+<span class="text-white/80 text-sm font-medium tracking-tight">iCloud 已连接</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex items-center justify-center size-10 rounded-full bg-white/5 hover:bg-white/10 transition-colors">
+<span class="material-symbols-outlined text-white text-[24px]">history</span>
+</button>
+<button class="flex items-center justify-center size-10 rounded-full bg-white/5 hover:bg-white/10 transition-colors">
+<span class="material-symbols-outlined text-white text-[24px]">settings</span>
+</button>
+</div>
+</header>
+<!-- Headline: Timer -->
+<main class="flex-1 flex flex-col items-center justify-center px-4">
+<div class="text-center mb-8">
+<h1 class="text-white text-[56px] font-bold tracking-tight leading-none">00:00:00</h1>
+<p class="text-white/40 mt-4 text-sm uppercase tracking-widest">就绪 - 等待录音</p>
+</div>
+<!-- Central Dynamic Waveform Visualization -->
+<div class="flex items-center justify-center gap-1.5 h-48 w-full max-w-xs">
+<div class="waveform-bar h-8 opacity-20"></div>
+<div class="waveform-bar h-12 opacity-30"></div>
+<div class="waveform-bar h-24 opacity-50"></div>
+<div class="waveform-bar h-36 opacity-80"></div>
+<div class="waveform-bar h-44"></div>
+<div class="waveform-bar h-32 opacity-80"></div>
+<div class="waveform-bar h-20 opacity-50"></div>
+<div class="waveform-bar h-10 opacity-30"></div>
+<div class="waveform-bar h-6 opacity-20"></div>
+</div>
+</main>
+<!-- Bottom Controls Area -->
+<footer class="pb-12 pt-6 glass-panel rounded-t-[40px]">
+<!-- Tabs: Mode Selector -->
+<div class="mb-8">
+<div class="flex overflow-x-auto no-scrollbar px-10 gap-8 items-center justify-center">
+<a class="flex flex-col items-center shrink-0" href="#">
+<p class="text-primary text-base font-bold tracking-wide">所思所想</p>
+<div class="mt-2 size-1.5 bg-primary rounded-full"></div>
+</a>
+<a class="flex flex-col items-center shrink-0 opacity-40" href="#">
+<p class="text-white text-base font-bold tracking-wide">会议模式</p>
+<div class="mt-2 size-1.5 bg-transparent rounded-full"></div>
+</a>
+<a class="flex flex-col items-center shrink-0 opacity-40" href="#">
+<p class="text-white text-base font-bold tracking-wide">旅行发现</p>
+<div class="mt-2 size-1.5 bg-transparent rounded-full"></div>
+</a>
+<a class="flex flex-col items-center shrink-0 opacity-40" href="#">
+<p class="text-white text-base font-bold tracking-wide">自定义模板</p>
+<div class="mt-2 size-1.5 bg-transparent rounded-full"></div>
+</a>
+</div>
+</div>
+<!-- SingleButton: Main Recording Button -->
+<div class="flex flex-col items-center justify-center px-4">
+<div class="relative">
+<!-- Breathing Effect Layer -->
+<div class="absolute inset-0 rounded-full breathing-glow scale-110 opacity-50"></div>
+<button class="relative flex size-24 cursor-pointer items-center justify-center rounded-full bg-primary text-white shadow-xl hover:bg-primary/90 transition-all active:scale-95">
+<span class="material-symbols-outlined text-[40px] font-light">mic</span>
+</button>
+</div>
+<div class="mt-8 flex items-center gap-2 text-white/40">
+<span class="material-symbols-outlined text-[18px]">lock</span>
+<span class="text-xs font-medium">端到端加密录音</span>
+</div>
+</div>
+</footer>
+<!-- Background Image/Texture for Glassmorphism Depth -->
+<div class="fixed inset-0 -z-10 overflow-hidden">
+<div class="absolute top-1/4 -left-20 size-80 bg-primary/20 rounded-full blur-[120px]"></div>
+<div class="absolute bottom-1/4 -right-20 size-80 bg-blue-900/20 rounded-full blur-[120px]"></div>
+</div>
+</div>
+<!-- Styles for hidden scrollbar -->
+<style>
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</body></html>

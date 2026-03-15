@@ -1,0 +1,62 @@
+/**
+ * Aivolo Design System - App Tokens
+ * Mobile-First CSS Variables
+ */
+
+:root {
+    /* Safe Area Insets for iOS */
+    --safe-area-top: env(safe-area-inset-top);
+    --safe-area-bottom: env(safe-area-inset-bottom);
+    --safe-area-left: env(safe-area-inset-left);
+    --safe-area-right: env(safe-area-inset-right);
+
+    /* Mobile-specific overrides */
+    --tab-bar-height: 50px;
+    --header-height: 44px;
+
+    /* Touch-friendly sizing */
+    --touch-target-min: 44px;
+    --button-height-mobile: 48px;
+
+    /* Mobile typography */
+    --font-size-mobile-base: 17px;
+    --font-size-mobile-sm: 15px;
+    --font-size-mobile-lg: 20px;
+    --font-size-mobile-title: 34px;
+}
+
+/* iOS-style blur effect */
+.blur-bg {
+    background: rgba(13, 13, 14, 0.9);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+}
+
+/* Tab bar container */
+.tab-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: calc(var(--tab-bar-height) + var(--safe-area-bottom));
+    padding-bottom: var(--safe-area-bottom);
+    background: rgba(28, 28, 30, 0.95);
+    backdrop-filter: blur(20px);
+    border-top: 0.5px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-around;
+    align-items: flex-start;
+    padding-top: 8px;
+    z-index: 1000;
+}
+
+/* Mobile header */
+.mobile-header {
+    padding: calc(var(--safe-area-top) + 12px) 16px 12px;
+    background: rgba(13, 13, 14, 0.9);
+    backdrop-filter: blur(20px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 0.5px solid rgba(255, 255, 255, 0.1);
+}
