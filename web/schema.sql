@@ -23,7 +23,7 @@ INSERT OR IGNORE INTO users (id, email, name, role, status)
 VALUES ('admin-1', 'wenyun@gmail.com', 'Wenyun', 'admin', 'active');
 
 -- Default shared config
-INSERT OR IGNORE INTO app_config (key, value) VALUES ('apiEndpoint', '');
+INSERT OR IGNORE INTO app_config (key, value) VALUES ('apiEndpoint', 'https://generativelanguage.googleapis.com/v1beta/openai');
 INSERT OR IGNORE INTO app_config (key, value) VALUES ('apiKey', '');
-INSERT OR IGNORE INTO app_config (key, value) VALUES ('selectedModel', 'gemini-2.5-pro');
+INSERT OR IGNORE INTO app_config (key, value) VALUES ('selectedModel', 'gemini-2.5-flash');
 INSERT OR IGNORE INTO app_config (key, value) VALUES ('whisperxEndpoint', '/api/transcribe');

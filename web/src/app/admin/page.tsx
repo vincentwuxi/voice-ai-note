@@ -21,9 +21,9 @@ export default function AdminPage() {
   const router = useRouter();
 
   const [config, setConfig] = useState({
-    apiEndpoint: '',
+    apiEndpoint: 'https://generativelanguage.googleapis.com/v1beta/openai',
     apiKey: '',
-    selectedModel: 'gemini-2.5-pro',
+    selectedModel: 'gemini-2.5-flash',
     whisperxEndpoint: '/api/transcribe',
   });
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -32,6 +32,9 @@ export default function AdminPage() {
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<'success' | 'error' | null>(null);
   const [activeTab, setActiveTab] = useState<'config' | 'users'>('config');
+  const [models, setModels] = useState<string[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
 
   // Redirect non-admin
   useEffect(() => {
@@ -98,6 +101,34 @@ export default function AdminPage() {
     } catch { /* ignore */ }
   };
 
+  const fetchModels = useCallback(async (endpoint?: string, key?: string) => {
+    const ep = endpoint || config.apiEndpoint;
+    const ak = key || config.apiKey;
+    if (!ep || !ak) {
+      setModelsError('请先填写 API 端点和密钥');
+      return;
+    }
+    setModelsLoading(true);
+    setModelsError(null);
+    try {
+      const res = await fetch(`${ep}/models`, {
+        headers: { Authorization: `Bearer ${ak}` },
+      });
+      if (!res.ok) throw new Error(`${res.status}`);
+      const data = await res.json();
+      // OpenAI-compatible format: { data: [{ id: 'model-name' }, ...] }
+      const ids: string[] = (data.data || [])
+        .map((m: { id: string }) => m.id)
+        .filter((id: string) => !id.includes('embedding') && !id.includes('imagen') && !id.includes('tts'))
+        .sort();
+      setModels(ids);
+      if (ids.length === 0) setModelsError('未找到可用模型');
+    } catch (err) {
+      setModelsError(`获取模型列表失败: ${err instanceof Error ? err.message : '未知错误'}`);
+    }
+    setModelsLoading(false);
+  }, [config.apiEndpoint, config.apiKey]);
+
   if (!user || user.role !== 'admin') return null;
 
   const inputClass = "w-full px-4 py-3 bg-[var(--color-bg-surface)] border border-white/8 rounded-xl text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:border-[var(--color-primary)]/40 transition-colors";
@@ -159,9 +190,12 @@ export default function AdminPage() {
                   type="url"
                   value={config.apiEndpoint}
                   onChange={e => setConfig(c => ({ ...c, apiEndpoint: e.target.value }))}
-                  placeholder="https://api.openai.com"
+                  placeholder="https://generativelanguage.googleapis.com/v1beta/openai"
                   className={inputClass}
                 />
+                <p className="text-[10px] text-[var(--color-text-tertiary)] mt-1">
+                  Google Gemini: https://generativelanguage.googleapis.com/v1beta/openai
+                </p>
               </div>
 
               <div>
@@ -172,7 +206,7 @@ export default function AdminPage() {
                   type="password"
                   value={config.apiKey}
                   onChange={e => setConfig(c => ({ ...c, apiKey: e.target.value }))}
-                  placeholder="sk-..."
+                  placeholder="AIzaSy..."
                   className={inputClass}
                 />
               </div>
@@ -181,13 +215,44 @@ export default function AdminPage() {
                 <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                   <Bot className="w-4 h-4" /> 模型
                 </label>
-                <input
-                  type="text"
-                  value={config.selectedModel}
-                  onChange={e => setConfig(c => ({ ...c, selectedModel: e.target.value }))}
-                  placeholder="gemini-2.5-pro"
-                  className={inputClass}
-                />
+                <div className="flex gap-2">
+                  {models.length > 0 ? (
+                    <select
+                      value={config.selectedModel}
+                      onChange={e => setConfig(c => ({ ...c, selectedModel: e.target.value }))}
+                      className={`${inputClass} cursor-pointer appearance-none`}
+                    >
+                      {!models.includes(config.selectedModel) && config.selectedModel && (
+                        <option value={config.selectedModel}>{config.selectedModel}</option>
+                      )}
+                      {models.map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={config.selectedModel}
+                      onChange={e => setConfig(c => ({ ...c, selectedModel: e.target.value }))}
+                      placeholder="gemini-2.5-flash"
+                      className={inputClass}
+                    />
+                  )}
+                  <button
+                    onClick={() => fetchModels()}
+                    disabled={modelsLoading}
+                    className="flex-shrink-0 px-3 py-2.5 rounded-xl bg-[var(--color-bg-surface)] border border-white/8 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:border-[var(--color-primary)]/30 transition-all cursor-pointer disabled:opacity-50"
+                    title="刷新模型列表"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${modelsLoading ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+                {modelsError && (
+                  <p className="text-xs text-[var(--color-error)] mt-1">{modelsError}</p>
+                )}
+                {models.length > 0 && (
+                  <p className="text-[10px] text-[var(--color-success)] mt-1">已加载 {models.length} 个可用模型</p>
+                )}
               </div>
 
               <div>
