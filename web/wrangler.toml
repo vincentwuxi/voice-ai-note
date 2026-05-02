@@ -16,6 +16,15 @@ binding = "ASSETS"
 [vars]
 WHISPERX_ENDPOINT = "https://whisperx.aivolo.com"
 
+# D1 Database
+[[d1_databases]]
+binding = "DB"
+database_name = "voicemind-db"
+database_id = "c125da73-f1d4-4246-b4f2-f4a8f9ad36cc"
+
 # Secrets (set via CLI, not in file):
 # wrangler secret put CF_ACCESS_CLIENT_ID
 # wrangler secret put CF_ACCESS_CLIENT_SECRET
+# wrangler secret put GOOGLE_CLIENT_ID
+# wrangler secret put GOOGLE_CLIENT_SECRET
+# wrangler secret put JWT_SECRET

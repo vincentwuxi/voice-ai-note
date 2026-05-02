@@ -257,6 +257,7 @@ export default function RecordPage() {
 
         try {
           const { transcribeWithWhisperX, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
+          const { getSharedLLMConfig } = await import('@/services/shared-config');
 
           const wxResult = await transcribeWithWhisperX(blob, whisperxUrl, {
             diarize: mode === 'meeting' || mode === 'interview',
@@ -276,10 +277,11 @@ export default function RecordPage() {
             language: wxResult.language,
           });
 
-          if (store.apiEndpoint && store.apiKey) {
+          const llmConfig = await getSharedLLMConfig();
+          if (llmConfig.apiEndpoint && llmConfig.apiKey) {
             try {
               const aiResult = await summarizeWithLLM(
-                fullText, template, store.apiEndpoint, store.apiKey, store.selectedModel
+                fullText, template, llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel
               );
               store.updateNote(id, {
                 title: aiResult.title,
@@ -385,6 +387,7 @@ export default function RecordPage() {
       const whisperxUrl = store.whisperxEndpoint;
       try {
         const { transcribeWithWhisperX, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
+        const { getSharedLLMConfig } = await import('@/services/shared-config');
         const wxResult = await transcribeWithWhisperX(file, whisperxUrl, {
           diarize: mode === 'meeting' || mode === 'interview',
         });
@@ -395,9 +398,10 @@ export default function RecordPage() {
         const fullText = segmentsToTranscript(segments);
         store.updateNote(id, { content: fullText, segments, speakerCount: speakers.size, language: wxResult.language });
 
-        if (store.apiEndpoint && store.apiKey) {
+        const llmConfig = await getSharedLLMConfig();
+        if (llmConfig.apiEndpoint && llmConfig.apiKey) {
           try {
-            const aiResult = await summarizeWithLLM(fullText, template, store.apiEndpoint, store.apiKey, store.selectedModel);
+            const aiResult = await summarizeWithLLM(fullText, template, llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel);
             store.updateNote(id, { title: aiResult.title, summary: aiResult.summary, keyPoints: aiResult.keyPoints, actionItems: aiResult.actionItems, isProcessing: false, updatedAt: new Date() });
           } catch {
             store.updateNote(id, { title: segments[0]?.text?.slice(0, 30) || file.name, summary: fullText.slice(0, 200), isProcessing: false, updatedAt: new Date() });
