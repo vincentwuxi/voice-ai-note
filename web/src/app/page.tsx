@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Mic, Pause, Play, Square, Shield, Trash2, Wand2 } from 'lucide-react';
+import { Mic, Pause, Play, Square, Shield, Trash2, Wand2, Upload } from 'lucide-react';
 import { useAppStore, RecordingMode, AI_TEMPLATES, AITemplate, MODE_TEMPLATE_MAP } from '@/store/app-store';
 import { saveAudioBlob } from '@/services/db';
 
@@ -29,6 +29,8 @@ export default function RecordPage() {
 
   const [analyserData, setAnalyserData] = useState<number[]>(new Array(64).fill(0));
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -333,6 +335,82 @@ export default function RecordPage() {
     cancelAnimationFrame(animFrameRef.current);
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    const now = new Date();
+    const id = Date.now().toString();
+    const mode = recordingMode;
+    const template = selectedTemplate;
+
+    // Get audio duration
+    let dur = 0;
+    try {
+      const audioCtx = new AudioContext();
+      const arrayBuf = await file.arrayBuffer();
+      const audioBuf = await audioCtx.decodeAudioData(arrayBuf);
+      dur = Math.round(audioBuf.duration);
+      audioCtx.close();
+    } catch { dur = 0; }
+
+    // Save to IndexedDB
+    saveAudioBlob(id, file).catch(console.error);
+
+    addNote({
+      id,
+      title: `📎 ${file.name}`,
+      content: '正在使用 WhisperX 转录上传的音频...',
+      summary: '正在处理...',
+      keyPoints: [],
+      actionItems: [],
+      tags: [mode === 'meeting' || mode === 'interview' ? 'project' : 'inspiration'],
+      mode,
+      duration: dur,
+      audioUrl: URL.createObjectURL(file),
+      segments: [],
+      speakerCount: 0,
+      createdAt: now,
+      updatedAt: now,
+      isProcessing: true,
+    });
+
+    setIsUploading(false);
+    // Reset file input
+    if (fileInputRef.current) fileInputRef.current.value = '';
+
+    // Async transcription
+    (async () => {
+      const store = useAppStore.getState();
+      const whisperxUrl = store.whisperxEndpoint;
+      try {
+        const { transcribeWithWhisperX, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
+        const wxResult = await transcribeWithWhisperX(file, whisperxUrl, {
+          diarize: mode === 'meeting' || mode === 'interview',
+        });
+        const segments = wxResult.segments.map(s => ({
+          start: s.start, end: s.end, text: s.text, speaker: s.speaker,
+        }));
+        const speakers = new Set(segments.map(s => s.speaker).filter(Boolean));
+        const fullText = segmentsToTranscript(segments);
+        store.updateNote(id, { content: fullText, segments, speakerCount: speakers.size, language: wxResult.language });
+
+        if (store.apiEndpoint && store.apiKey) {
+          try {
+            const aiResult = await summarizeWithLLM(fullText, template, store.apiEndpoint, store.apiKey, store.selectedModel);
+            store.updateNote(id, { title: aiResult.title, summary: aiResult.summary, keyPoints: aiResult.keyPoints, actionItems: aiResult.actionItems, isProcessing: false, updatedAt: new Date() });
+          } catch {
+            store.updateNote(id, { title: segments[0]?.text?.slice(0, 30) || file.name, summary: fullText.slice(0, 200), isProcessing: false, updatedAt: new Date() });
+          }
+        } else {
+          store.updateNote(id, { title: segments[0]?.text?.slice(0, 30) || file.name, summary: fullText.slice(0, 200), isProcessing: false, updatedAt: new Date() });
+        }
+      } catch (err) {
+        store.updateNote(id, { title: `转录失败: ${file.name}`, content: `WhisperX 转录出错: ${err instanceof Error ? err.message : '未知错误'}`, summary: '转录失败，请检查 WhisperX 服务', isProcessing: false, updatedAt: new Date() });
+      }
+    })();
+  };
+
   const currentTemplate = AI_TEMPLATES[selectedTemplate];
 
   return (
@@ -467,8 +545,31 @@ export default function RecordPage() {
         )}
       </div>
 
+      {/* Upload */}
+      {!isRecording && (
+        <div className="mt-6">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="audio/*,.mp3,.wav,.m4a,.webm,.ogg,.flac"
+            onChange={handleFileUpload}
+            className="hidden"
+            id="audio-upload"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] border border-white/8 hover:border-[var(--color-primary)]/40 hover:text-[var(--color-primary)] transition-all cursor-pointer disabled:opacity-50"
+          >
+            <Upload className="w-4 h-4" />
+            {isUploading ? '上传中...' : '上传音频文件'}
+          </button>
+          <p className="text-[10px] text-[var(--color-text-tertiary)] mt-2 text-center">支持 MP3 / WAV / M4A / WebM / FLAC</p>
+        </div>
+      )}
+
       {/* Status */}
-      <div className="flex items-center gap-2 mt-8 text-xs text-[var(--color-text-tertiary)]">
+      <div className="flex items-center gap-2 mt-6 text-xs text-[var(--color-text-tertiary)]">
         <Shield className="w-3.5 h-3.5" />
         <span>End-to-end encrypted · 本地持久化存储</span>
       </div>

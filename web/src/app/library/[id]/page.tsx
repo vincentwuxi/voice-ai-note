@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useCallback } from 'react';
-import { ArrowLeft, Play, Pause, Share2, Download, Square, Pencil, Users, Mic, FileText, FileJson, Subtitles, Edit3, Check } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Share2, Download, Square, Pencil, Users, Mic, FileText, FileJson, Subtitles, Edit3, Check, X, Plus, Trash2 } from 'lucide-react';
 import { useAppStore, NoteTag, TranscriptSegment } from '@/store/app-store';
 import { getAudioBlob, exportToMarkdown, exportToSRT, exportToJSON } from '@/services/db';
 import { useRouter } from 'next/navigation';
@@ -150,6 +150,12 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const [playProgress, setPlayProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState('');
+  const [editSummary, setEditSummary] = useState('');
+  const [editKeyPoints, setEditKeyPoints] = useState<string[]>([]);
+  const [editActionItems, setEditActionItems] = useState<string[]>([]);
+  const { updateNote } = useAppStore();
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const note = notes.find((n) => n.id === id);
@@ -240,6 +246,28 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
     setShowExportMenu(false);
   };
 
+  const startEditing = () => {
+    if (!note) return;
+    setEditTitle(note.title);
+    setEditSummary(note.summary);
+    setEditKeyPoints([...note.keyPoints]);
+    setEditActionItems([...note.actionItems]);
+    setIsEditing(true);
+  };
+
+  const saveEdits = () => {
+    updateNote(id, {
+      title: editTitle,
+      summary: editSummary,
+      keyPoints: editKeyPoints.filter(p => p.trim()),
+      actionItems: editActionItems.filter(a => a.trim()),
+      updatedAt: new Date(),
+    });
+    setIsEditing(false);
+  };
+
+  const cancelEditing = () => setIsEditing(false);
+
   return (
     <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-10">
       <audio ref={audioRef} preload="metadata" />
@@ -255,6 +283,30 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
         </button>
 
         <div className="flex items-center gap-3">
+          {!isEditing ? (
+            <button
+              onClick={startEditing}
+              className="p-2 rounded-lg bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors cursor-pointer"
+              title="编辑笔记"
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={saveEdits}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--color-success)] text-white text-sm font-medium cursor-pointer hover:brightness-110 transition-all"
+              >
+                <Check className="w-4 h-4" /> 保存
+              </button>
+              <button
+                onClick={cancelEditing}
+                className="p-2 rounded-lg bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] hover:text-[var(--color-error)] transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </>
+          )}
           <button className="p-2 rounded-lg bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer">
             <Share2 className="w-4 h-4" />
           </button>
@@ -302,7 +354,15 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
             </span>
           )}
         </div>
-        <h1 className="text-2xl lg:text-3xl font-bold mb-2">{note.title}</h1>
+        <h1 className="text-2xl lg:text-3xl font-bold mb-2">
+          {isEditing ? (
+            <input
+              value={editTitle}
+              onChange={e => setEditTitle(e.target.value)}
+              className="w-full bg-transparent border-b-2 border-[var(--color-primary)]/50 focus:border-[var(--color-primary)] outline-none pb-1"
+            />
+          ) : note.title}
+        </h1>
         <div className="flex items-center gap-4 text-sm text-[var(--color-text-tertiary)]">
           <span>{formatFullDate(note.createdAt)}</span>
           <span>{formatDuration(note.duration)}</span>
@@ -321,21 +381,57 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
             <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary)] mb-3">
               <Pencil className="w-4 h-4" /> AI 摘要
             </h2>
-            <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">{note.summary}</p>
+            {isEditing ? (
+              <textarea
+                value={editSummary}
+                onChange={e => setEditSummary(e.target.value)}
+                rows={3}
+                className="w-full text-sm text-[var(--color-text-secondary)] leading-relaxed bg-[var(--color-bg-surface)] rounded-lg p-3 border border-white/10 focus:border-[var(--color-primary)]/50 outline-none resize-none"
+              />
+            ) : (
+              <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">{note.summary}</p>
+            )}
           </div>
 
           {/* Key Points */}
           {note.keyPoints.length > 0 && (
             <div className="card p-5">
               <h2 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">📌 关键要点</h2>
-              <ul className="space-y-2">
-                {note.keyPoints.map((point, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-[var(--color-text-secondary)]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] mt-1.5 shrink-0" />
-                    {point}
-                  </li>
-                ))}
-              </ul>
+              {isEditing ? (
+                <div className="space-y-2">
+                  {editKeyPoints.map((point, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input
+                        value={point}
+                        onChange={e => {
+                          const next = [...editKeyPoints];
+                          next[i] = e.target.value;
+                          setEditKeyPoints(next);
+                        }}
+                        className="flex-1 text-sm bg-[var(--color-bg-surface)] rounded-lg px-3 py-2 border border-white/10 focus:border-[var(--color-primary)]/50 outline-none text-[var(--color-text-secondary)]"
+                      />
+                      <button onClick={() => setEditKeyPoints(editKeyPoints.filter((_, j) => j !== i))} className="p-1 text-[var(--color-text-tertiary)] hover:text-[var(--color-error)] cursor-pointer">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setEditKeyPoints([...editKeyPoints, ''])}
+                    className="flex items-center gap-1 text-xs text-[var(--color-primary)] hover:brightness-125 cursor-pointer mt-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> 添加要点
+                  </button>
+                </div>
+              ) : (
+                <ul className="space-y-2">
+                  {note.keyPoints.map((point, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-[var(--color-text-secondary)]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] mt-1.5 shrink-0" />
+                      {point}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 
@@ -343,13 +439,40 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
           {note.actionItems.length > 0 && (
             <div className="card p-5">
               <h2 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">☑️ 待办事项</h2>
-              <ul className="space-y-2.5">
-                {note.actionItems.map((item, i) => (
-                  <li key={i} className="flex items-center gap-2.5 text-sm text-[var(--color-text-secondary)] cursor-pointer hover:text-[var(--color-text-primary)] transition-colors">
-                    <Square className="w-4 h-4 text-[var(--color-success)] shrink-0" /> {item}
-                  </li>
-                ))}
-              </ul>
+              {isEditing ? (
+                <div className="space-y-2">
+                  {editActionItems.map((item, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input
+                        value={item}
+                        onChange={e => {
+                          const next = [...editActionItems];
+                          next[i] = e.target.value;
+                          setEditActionItems(next);
+                        }}
+                        className="flex-1 text-sm bg-[var(--color-bg-surface)] rounded-lg px-3 py-2 border border-white/10 focus:border-[var(--color-primary)]/50 outline-none text-[var(--color-text-secondary)]"
+                      />
+                      <button onClick={() => setEditActionItems(editActionItems.filter((_, j) => j !== i))} className="p-1 text-[var(--color-text-tertiary)] hover:text-[var(--color-error)] cursor-pointer">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setEditActionItems([...editActionItems, ''])}
+                    className="flex items-center gap-1 text-xs text-[var(--color-primary)] hover:brightness-125 cursor-pointer mt-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> 添加待办
+                  </button>
+                </div>
+              ) : (
+                <ul className="space-y-2.5">
+                  {note.actionItems.map((item, i) => (
+                    <li key={i} className="flex items-center gap-2.5 text-sm text-[var(--color-text-secondary)] cursor-pointer hover:text-[var(--color-text-primary)] transition-colors">
+                      <Square className="w-4 h-4 text-[var(--color-success)] shrink-0" /> {item}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 
