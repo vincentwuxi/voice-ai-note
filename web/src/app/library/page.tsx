@@ -1,9 +1,11 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Search, Play, Users, Trash2, X, AlertTriangle } from 'lucide-react';
+import { Search, Play, Users, Trash2, X, AlertTriangle, ArrowUpDown } from 'lucide-react';
 import { useAppStore, NoteTag } from '@/store/app-store';
 import { useRouter } from 'next/navigation';
+
+type SortMode = 'newest' | 'oldest' | 'longest' | 'shortest';
 
 const tagConfig: Record<NoteTag, { label: string; color: string; bgColor: string }> = {
   inspiration: { label: '灵感', color: 'var(--color-tag-amber)', bgColor: 'rgba(245, 158, 11, 0.15)' },
@@ -36,6 +38,7 @@ export default function LibraryPage() {
   const { notes, activeTagFilter, setActiveTagFilter, searchQuery, setSearchQuery, deleteNote } = useAppStore();
   const router = useRouter();
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode>('newest');
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -44,27 +47,60 @@ export default function LibraryPage() {
   };
 
   const filteredNotes = useMemo(() => {
-    return notes.filter((note) => {
+    const q = searchQuery.toLowerCase();
+    const filtered = notes.filter((note) => {
       if (activeTagFilter !== 'all' && !note.tags.includes(activeTagFilter)) return false;
-      if (searchQuery && !note.title.includes(searchQuery) && !note.content.includes(searchQuery)) return false;
+      if (q) {
+        const searchFields = [
+          note.title, note.content, note.summary,
+          ...note.keyPoints, ...note.actionItems,
+        ].join(' ').toLowerCase();
+        if (!searchFields.includes(q)) return false;
+      }
       return true;
     });
-  }, [notes, activeTagFilter, searchQuery]);
+    // Sort
+    return filtered.sort((a, b) => {
+      switch (sortMode) {
+        case 'oldest': return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case 'longest': return b.duration - a.duration;
+        case 'shortest': return a.duration - b.duration;
+        default: return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+    });
+  }, [notes, activeTagFilter, searchQuery, sortMode]);
 
   return (
     <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl lg:text-4xl font-bold">思想库</h1>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-tertiary)]" />
-          <input
-            type="text"
-            placeholder="搜索..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 pr-4 py-2.5 bg-[var(--color-bg-card)] border border-white/8 rounded-xl text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:border-[var(--color-primary)]/40 w-48 lg:w-64 transition-colors"
-          />
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl lg:text-4xl font-bold">思想库</h1>
+          <span className="text-sm text-[var(--color-text-tertiary)] mt-2">{filteredNotes.length} 条</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {/* Sort */}
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as SortMode)}
+            className="px-3 py-2.5 bg-[var(--color-bg-card)] border border-white/8 rounded-xl text-xs text-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)]/40 cursor-pointer appearance-none"
+          >
+            <option value="newest">最新优先</option>
+            <option value="oldest">最早优先</option>
+            <option value="longest">最长优先</option>
+            <option value="shortest">最短优先</option>
+          </select>
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-tertiary)]" />
+            <input
+              type="text"
+              placeholder="搜索..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 pr-4 py-2.5 bg-[var(--color-bg-card)] border border-white/8 rounded-xl text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:border-[var(--color-primary)]/40 w-48 lg:w-64 transition-colors"
+            />
+          </div>
         </div>
       </div>
 

@@ -1,8 +1,8 @@
 'use client';
 
 import { use, useCallback } from 'react';
-import { ArrowLeft, Play, Pause, Share2, Download, Square, Pencil, Users, Mic, FileText, FileJson, Subtitles, Edit3, Check, X, Plus, Trash2 } from 'lucide-react';
-import { useAppStore, NoteTag, TranscriptSegment } from '@/store/app-store';
+import { ArrowLeft, Play, Pause, Share2, Download, Square, Pencil, Users, Mic, FileText, FileJson, Subtitles, Edit3, Check, X, Plus, Trash2, RefreshCw, Loader2 } from 'lucide-react';
+import { useAppStore, NoteTag, TranscriptSegment, AI_TEMPLATES, AITemplate } from '@/store/app-store';
 import { getAudioBlob, exportToMarkdown, exportToSRT, exportToJSON } from '@/services/db';
 import { useRouter } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
@@ -152,6 +152,9 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [isResummarizing, setIsResummarizing] = useState(false);
+  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editSummary, setEditSummary] = useState('');
   const [editKeyPoints, setEditKeyPoints] = useState<string[]>([]);
@@ -274,6 +277,43 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
     router.push('/library');
   };
 
+  const cyclePlaybackRate = () => {
+    const rates = [0.5, 0.75, 1, 1.25, 1.5, 2];
+    const idx = rates.indexOf(playbackRate);
+    const next = rates[(idx + 1) % rates.length];
+    setPlaybackRate(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  };
+
+  const resummarize = async (template: AITemplate) => {
+    setShowTemplateSelector(false);
+    if (!note || !note.content) return;
+    setIsResummarizing(true);
+    try {
+      const { summarizeWithLLM } = await import('@/services/ai-service');
+      const { getSharedLLMConfig } = await import('@/services/shared-config');
+      const llmConfig = await getSharedLLMConfig();
+      if (!llmConfig.apiEndpoint || !llmConfig.apiKey) {
+        alert('请先在管理后台配置 LLM API 密钥');
+        setIsResummarizing(false);
+        return;
+      }
+      const result = await summarizeWithLLM(
+        note.content, template, llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel
+      );
+      updateNote(id, {
+        title: result.title,
+        summary: result.summary,
+        keyPoints: result.keyPoints,
+        actionItems: result.actionItems,
+        updatedAt: new Date(),
+      });
+    } catch (err) {
+      alert(`重新摘要失败: ${err instanceof Error ? err.message : '未知错误'}`);
+    }
+    setIsResummarizing(false);
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-10">
       <audio ref={audioRef} preload="metadata" />
@@ -392,9 +432,37 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
         <div className="lg:col-span-2 space-y-5">
           {/* Summary */}
           <div className="card p-5">
-            <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary)] mb-3">
-              <Pencil className="w-4 h-4" /> AI 摘要
-            </h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary)]">
+                <Pencil className="w-4 h-4" /> AI 摘要
+              </h2>
+              {!isEditing && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowTemplateSelector(!showTemplateSelector)}
+                    disabled={isResummarizing}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium text-[var(--color-text-tertiary)] bg-[var(--color-bg-surface)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 transition-all cursor-pointer disabled:opacity-50"
+                    title="重新生成 AI 摘要"
+                  >
+                    {isResummarizing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                    {isResummarizing ? '生成中...' : '重新摘要'}
+                  </button>
+                  {showTemplateSelector && (
+                    <div className="absolute right-0 top-full mt-1 w-40 card p-1.5 z-50 shadow-xl border border-white/10">
+                      {(Object.entries(AI_TEMPLATES) as [AITemplate, { label: string; icon: string }][]).map(([key, tmpl]) => (
+                        <button
+                          key={key}
+                          onClick={() => resummarize(key)}
+                          className="w-full text-left px-3 py-2 rounded-lg text-xs flex items-center gap-2 text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-[var(--color-text-primary)] cursor-pointer transition-colors"
+                        >
+                          <span>{tmpl.icon}</span> {tmpl.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             {isEditing ? (
               <textarea
                 value={editSummary}
@@ -496,7 +564,7 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
             <div className="flex items-center gap-4">
               <button
                 onClick={togglePlay}
-                className="w-12 h-12 rounded-full bg-[var(--color-primary)] flex items-center justify-center cursor-pointer hover:bg-[var(--color-primary-light)] transition-colors"
+                className="w-12 h-12 rounded-full bg-[var(--color-primary)] flex items-center justify-center cursor-pointer hover:bg-[var(--color-primary-light)] transition-colors flex-shrink-0"
               >
                 {isPlaying ? <Pause className="w-5 h-5 text-black" /> : <Play className="w-5 h-5 text-black ml-0.5" />}
               </button>
@@ -516,6 +584,13 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
                   <span>{formatDuration(note.duration)}</span>
                 </div>
               </div>
+              <button
+                onClick={cyclePlaybackRate}
+                className="px-2 py-1 rounded-lg text-xs font-bold text-[var(--color-text-secondary)] bg-[var(--color-bg-surface)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 transition-all cursor-pointer min-w-[3rem] text-center flex-shrink-0"
+                title="切换播放速度"
+              >
+                {playbackRate}x
+              </button>
             </div>
           </div>
         </div>
