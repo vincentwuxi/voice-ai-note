@@ -124,7 +124,7 @@ const DEFAULT_CONFIG: AppConfig = {
   apiEndpoint: '',
   apiKey: '',
   selectedModel: 'gemini-2.5-pro',
-  whisperxEndpoint: 'http://100.67.209.116:9100',
+  whisperxEndpoint: '/api/transcribe',
   speakerNames: {},
 };
 

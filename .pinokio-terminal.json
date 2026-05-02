@@ -1,0 +1,29 @@
+{
+  "workspace": "voice-ai-note",
+  "cwd": "/Users/wenyun/code/voice-ai-note",
+  "updated_at": "2026-04-11T01:06:14.149Z",
+  "sessions": [
+    {
+      "provider": "gemini",
+      "label": "Gemini",
+      "terminal_id": "gemini:voice-ai-note:20260411-090614-ca982b",
+      "created_at": "2026-04-11T01:06:14.149Z",
+      "launch_mode": "guarded",
+      "command": "npx -y @google/gemini-cli@latest",
+      "skill_context": "/Users/wenyun/code/voice-ai-note/.pinokio/skills/active.md",
+      "skills": [
+        {
+          "id": "879b8c7da6ed3446",
+          "label": "pinokio",
+          "file": "/Users/wenyun/.agents/skills/pinokio/SKILL.md"
+        },
+        {
+          "id": "ab426ea0b5d96a2d",
+          "label": "gepeto",
+          "file": "/Users/wenyun/.agents/skills/gepeto/SKILL.md"
+        }
+      ],
+      "uploaded_files": []
+    }
+  ]
+}

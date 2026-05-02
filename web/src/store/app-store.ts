@@ -295,7 +295,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   apiEndpoint: '',
   apiKey: '',
   selectedModel: 'gemini-2.5-pro',
-  whisperxEndpoint: 'http://100.67.209.116:9100',
+  whisperxEndpoint: '/api/transcribe',
   setApiEndpoint: (url) => { set({ apiEndpoint: url }); saveConfig({ apiEndpoint: url }).catch(console.error); },
   setApiKey: (key) => { set({ apiKey: key }); saveConfig({ apiKey: key }).catch(console.error); },
   setSelectedModel: (model) => { set({ selectedModel: model }); saveConfig({ selectedModel: model }).catch(console.error); },

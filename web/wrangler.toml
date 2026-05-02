@@ -1,0 +1,21 @@
+name = "voicemind-web"
+main = ".open-next/worker.js"
+compatibility_date = "2026-04-30"
+compatibility_flags = ["nodejs_compat"]
+
+# Custom domain
+routes = [
+  { pattern = "voice.aivolo.com", custom_domain = true }
+]
+
+[assets]
+directory = ".open-next/assets"
+binding = "ASSETS"
+
+# WhisperX Tunnel endpoint (public vars)
+[vars]
+WHISPERX_ENDPOINT = "https://whisperx.aivolo.com"
+
+# Secrets (set via CLI, not in file):
+# wrangler secret put CF_ACCESS_CLIENT_ID
+# wrangler secret put CF_ACCESS_CLIENT_SECRET

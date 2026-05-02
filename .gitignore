@@ -62,3 +62,7 @@ web/.env.local
 *.log
 __pycache__/
 *.pyc
+
+# Cloudflare Workers build
+web/.open-next/
+web/.wrangler/

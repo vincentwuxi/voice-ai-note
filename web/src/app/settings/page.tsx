@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Settings as SettingsIcon, Server, Key, Bot, Check, Loader2, AudioLines } from 'lucide-react';
+import { Settings as SettingsIcon, Server, Key, Bot, Check, Loader2, AudioLines, Shield } from 'lucide-react';
 import { useAppStore } from '@/store/app-store';
 
 export default function SettingsPage() {
@@ -27,13 +27,20 @@ export default function SettingsPage() {
     finally { setIsTesting(false); }
   };
 
+  const isProxyMode = whisperxEndpoint.startsWith('/');
+
   const testWhisperX = async () => {
     if (!whisperxEndpoint) { setWxTestResult('error'); return; }
     setIsTestingWx(true);
     setWxTestResult(null);
     try {
-      const res = await fetch(whisperxEndpoint, { method: 'GET' });
-      setWxTestResult(res.ok || res.status === 404 || res.status === 405 ? 'success' : 'error');
+      const testUrl = isProxyMode ? whisperxEndpoint : whisperxEndpoint;
+      const res = await fetch(testUrl, { method: 'GET' });
+      const data = isProxyMode ? await res.json().catch(() => null) : null;
+      const ok = isProxyMode
+        ? (data?.status === 'ok')
+        : (res.ok || res.status === 404 || res.status === 405);
+      setWxTestResult(ok ? 'success' : 'error');
     } catch { setWxTestResult('error'); }
     finally { setIsTestingWx(false); }
   };
@@ -56,6 +63,12 @@ export default function SettingsPage() {
         <p className="text-sm text-[var(--color-text-tertiary)] -mt-3">
           语音转写 + 说话人分离（支持多人会议）
         </p>
+        {isProxyMode && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-tag-emerald)]/10 text-xs text-[var(--color-tag-emerald)]">
+            <Shield className="w-3.5 h-3.5" />
+            <span>安全代理模式：音频通过 Cloudflare Tunnel 加密传输，WhisperX 未暴露公网</span>
+          </div>
+        )}
 
         <div>
           <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
@@ -150,7 +163,7 @@ export default function SettingsPage() {
       <div className="card p-6">
         <h2 className="text-lg font-semibold mb-3">关于</h2>
         <div className="space-y-2 text-sm text-[var(--color-text-secondary)]">
-          <p><strong className="text-[var(--color-text-primary)]">灵思 VoiceMind</strong> Web v1.1.0</p>
+          <p><strong className="text-[var(--color-text-primary)]">灵思 VoiceMind</strong> Web v1.3.0</p>
           <p>用声音捕捉灵感，用 AI 构建知识库</p>
           <p className="text-xs text-[var(--color-text-tertiary)]">WhisperX 转录 + 说话人分离 · LLM 智能摘要</p>
           <p className="text-[var(--color-text-tertiary)]">© 2026 VoiceMind. All rights reserved.</p>
