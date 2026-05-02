@@ -27,3 +27,15 @@ INSERT OR IGNORE INTO app_config (key, value) VALUES ('apiEndpoint', 'https://ge
 INSERT OR IGNORE INTO app_config (key, value) VALUES ('apiKey', '');
 INSERT OR IGNORE INTO app_config (key, value) VALUES ('selectedModel', 'gemini-2.5-flash');
 INSERT OR IGNORE INTO app_config (key, value) VALUES ('whisperxEndpoint', '/api/transcribe');
+
+-- Audio files tracking (R2)
+CREATE TABLE IF NOT EXISTS audio_files (
+  id TEXT PRIMARY KEY,
+  user_email TEXT NOT NULL,
+  note_id TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  content_type TEXT NOT NULL DEFAULT 'audio/webm',
+  r2_key TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

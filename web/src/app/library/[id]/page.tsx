@@ -164,20 +164,31 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
 
   const note = notes.find((n) => n.id === id);
 
-  // Load audio from IndexedDB
+  // Load audio: R2 (cloud) → IndexedDB (local) → note.audioUrl (session)
   useEffect(() => {
-    if (!note) return;
-    if (note.audioUrl && audioRef.current) {
-      audioRef.current.src = note.audioUrl;
-      return;
-    }
-    // Try loading from IndexedDB
-    getAudioBlob(id).then(blob => {
-      if (blob && audioRef.current) {
-        const url = URL.createObjectURL(blob);
-        audioRef.current.src = url;
+    if (!note || !audioRef.current) return;
+    const audio = audioRef.current;
+    
+    // Try R2 cloud URL first
+    const r2Url = `/api/audio/${id}`;
+    fetch(r2Url, { method: 'HEAD' }).then(res => {
+      if (res.ok) {
+        audio.src = r2Url;
+        return;
       }
-    }).catch(() => {});
+      throw new Error('Not in R2');
+    }).catch(() => {
+      // Fallback: IndexedDB local cache
+      getAudioBlob(id).then(blob => {
+        if (blob) {
+          audio.src = URL.createObjectURL(blob);
+        } else if (note.audioUrl) {
+          audio.src = note.audioUrl;
+        }
+      }).catch(() => {
+        if (note.audioUrl) audio.src = note.audioUrl;
+      });
+    });
   }, [id, note]);
 
   const togglePlay = useCallback(() => {

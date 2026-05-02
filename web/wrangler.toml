@@ -22,6 +22,11 @@ binding = "DB"
 database_name = "voicemind-db"
 database_id = "c125da73-f1d4-4246-b4f2-f4a8f9ad36cc"
 
+# R2 Object Storage (audio files)
+[[r2_buckets]]
+binding = "AUDIO_BUCKET"
+bucket_name = "voicemind-audio"
+
 # Secrets (set via CLI, not in file):
 # wrangler secret put CF_ACCESS_CLIENT_ID
 # wrangler secret put CF_ACCESS_CLIENT_SECRET

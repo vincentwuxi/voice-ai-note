@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { ShieldCheck, Server, Key, Bot, Check, Loader2, Users, Crown, Ban, UserCheck, RefreshCw } from 'lucide-react';
+import { ShieldCheck, Server, Key, Bot, Check, Loader2, Users, Crown, Ban, UserCheck, RefreshCw, HardDrive, Upload, Clock } from 'lucide-react';
 import { useAuthStore } from '@/store/auth-store';
 import { useRouter } from 'next/navigation';
 
@@ -14,6 +14,22 @@ interface AdminUser {
   status: string;
   created_at: string;
   last_login: string;
+}
+
+interface StorageStats {
+  totalFiles: number;
+  totalBytes: number;
+  r2FreeTierBytes: number;
+  perUser: { user_email: string; file_count: number; total_bytes: number }[];
+  recentUploads: { id: string; user_email: string; filename: string; size_bytes: number; content_type: string; created_at: string }[];
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
 }
 
 export default function AdminPage() {
@@ -31,10 +47,12 @@ export default function AdminPage() {
   const [usersLoading, setUsersLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<'success' | 'error' | null>(null);
-  const [activeTab, setActiveTab] = useState<'config' | 'users'>('config');
+  const [activeTab, setActiveTab] = useState<'config' | 'users' | 'storage'>('config');
   const [models, setModels] = useState<string[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
+  const [storage, setStorage] = useState<StorageStats | null>(null);
+  const [storageLoading, setStorageLoading] = useState(false);
 
   // Redirect non-admin
   useEffect(() => {
@@ -129,6 +147,19 @@ export default function AdminPage() {
     setModelsLoading(false);
   }, [config.apiEndpoint, config.apiKey]);
 
+  const loadStorage = useCallback(async () => {
+    setStorageLoading(true);
+    try {
+      const res = await fetch('/api/admin/storage');
+      if (res.ok) setStorage(await res.json());
+    } catch { /* ignore */ }
+    setStorageLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === 'storage' && !storage) loadStorage();
+  }, [activeTab, storage, loadStorage]);
+
   if (!user || user.role !== 'admin') return null;
 
   const inputClass = "w-full px-4 py-3 bg-[var(--color-bg-surface)] border border-white/8 rounded-xl text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:border-[var(--color-primary)]/40 transition-colors";
@@ -161,6 +192,16 @@ export default function AdminPage() {
           }`}
         >
           <span className="flex items-center gap-2"><Users className="w-4 h-4" /> 用户管理 ({users.length})</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('storage')}
+          className={`px-4 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
+            activeTab === 'storage'
+              ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)] border border-[var(--color-primary)]/30'
+              : 'bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] border border-white/6 hover:border-white/15'
+          }`}
+        >
+          <span className="flex items-center gap-2"><HardDrive className="w-4 h-4" /> 存储</span>
         </button>
       </div>
 
@@ -391,6 +432,119 @@ export default function AdminPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Storage Tab */}
+      {activeTab === 'storage' && (
+        <div className="card p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold flex items-center gap-2 mb-1">
+                <HardDrive className="w-5 h-5 text-[var(--color-tag-emerald)]" /> R2 云存储
+              </h2>
+              <p className="text-xs text-[var(--color-text-tertiary)]">
+                Cloudflare R2 对象存储 · 10 GB 免费额度
+              </p>
+            </div>
+            <button
+              onClick={loadStorage}
+              disabled={storageLoading}
+              className="p-2 rounded-lg bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${storageLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+
+          {storageLoading && !storage ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-[var(--color-text-tertiary)]" />
+            </div>
+          ) : storage ? (
+            <>
+              {/* Usage Overview */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-[var(--color-bg-surface)] rounded-xl p-4">
+                  <p className="text-xs text-[var(--color-text-tertiary)] mb-1">总文件数</p>
+                  <p className="text-2xl font-bold text-[var(--color-text-primary)]">{storage.totalFiles}</p>
+                </div>
+                <div className="bg-[var(--color-bg-surface)] rounded-xl p-4">
+                  <p className="text-xs text-[var(--color-text-tertiary)] mb-1">已用空间</p>
+                  <p className="text-2xl font-bold text-[var(--color-text-primary)]">{formatBytes(storage.totalBytes)}</p>
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              <div>
+                <div className="flex justify-between text-xs text-[var(--color-text-tertiary)] mb-2">
+                  <span>R2 免费额度使用率</span>
+                  <span>{formatBytes(storage.totalBytes)} / {formatBytes(storage.r2FreeTierBytes)}</span>
+                </div>
+                <div className="h-2.5 bg-[var(--color-bg-surface)] rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all"
+                    style={{
+                      width: `${Math.min((storage.totalBytes / storage.r2FreeTierBytes) * 100, 100)}%`,
+                      backgroundColor: (storage.totalBytes / storage.r2FreeTierBytes) > 0.8 ? 'var(--color-error)' : 'var(--color-success)',
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Per-User Breakdown */}
+              {storage.perUser.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">👤 用户用量分布</h3>
+                  <div className="space-y-2">
+                    {storage.perUser.map((u) => (
+                      <div key={u.user_email} className="flex items-center justify-between p-3 bg-[var(--color-bg-surface)] rounded-xl">
+                        <div>
+                          <p className="text-sm text-[var(--color-text-primary)]">{u.user_email}</p>
+                          <p className="text-xs text-[var(--color-text-tertiary)]">{u.file_count} 个文件</p>
+                        </div>
+                        <span className="text-sm font-medium text-[var(--color-text-secondary)]">{formatBytes(u.total_bytes)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Recent Uploads */}
+              {storage.recentUploads.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">📁 最近上传</h3>
+                  <div className="space-y-2">
+                    {storage.recentUploads.map((f) => (
+                      <div key={f.id} className="flex items-center justify-between p-3 bg-[var(--color-bg-surface)] rounded-xl">
+                        <div className="flex items-center gap-3">
+                          <Upload className="w-4 h-4 text-[var(--color-text-tertiary)]" />
+                          <div>
+                            <p className="text-sm text-[var(--color-text-primary)]">{f.filename}</p>
+                            <p className="text-xs text-[var(--color-text-tertiary)]">{f.user_email}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-[var(--color-text-secondary)]">{formatBytes(f.size_bytes)}</p>
+                          <p className="text-[10px] text-[var(--color-text-tertiary)] flex items-center gap-1 justify-end">
+                            <Clock className="w-3 h-3" />
+                            {new Date(f.created_at).toLocaleDateString('zh-CN')}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {storage.totalFiles === 0 && (
+                <div className="text-center py-8 text-[var(--color-text-tertiary)]">
+                  <HardDrive className="w-10 h-10 mx-auto mb-3 opacity-30" />
+                  <p className="text-sm">暂无云存储文件</p>
+                  <p className="text-xs mt-1">录音或上传音频后将自动同步到 R2</p>
+                </div>
+              )}
+            </>
+          ) : null}
         </div>
       )}
     </div>

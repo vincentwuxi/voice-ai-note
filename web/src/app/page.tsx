@@ -6,6 +6,18 @@ import { useAppStore, RecordingMode, AI_TEMPLATES, AITemplate, MODE_TEMPLATE_MAP
 import { saveAudioBlob } from '@/services/db';
 import { useRouter } from 'next/navigation';
 
+// Upload audio to R2 cloud storage (fire-and-forget)
+async function uploadToR2(noteId: string, blob: Blob) {
+  try {
+    const form = new FormData();
+    form.append('file', blob, `${noteId}.webm`);
+    form.append('noteId', noteId);
+    await fetch('/api/audio/upload', { method: 'POST', body: form });
+  } catch (err) {
+    console.warn('[R2 Upload]', err);
+  }
+}
+
 const modes: { id: RecordingMode; label: string; sublabel: string }[] = [
   { id: 'thoughts', label: '所思所想', sublabel: 'Thoughts' },
   { id: 'meeting', label: '会议模式', sublabel: 'Meeting' },
@@ -227,8 +239,9 @@ export default function RecordPage() {
       const dur = elapsedTime;
       const template = selectedTemplate;
 
-      // Save audio to IndexedDB
+      // Save audio to IndexedDB (local) + R2 (cloud)
       saveAudioBlob(id, blob).catch(console.error);
+      uploadToR2(id, blob);
 
       addNote({
         id,
@@ -363,8 +376,9 @@ export default function RecordPage() {
       audioCtx.close();
     } catch { dur = 0; }
 
-    // Save to IndexedDB
+    // Save to IndexedDB (local) + R2 (cloud)
     saveAudioBlob(id, file).catch(console.error);
+    uploadToR2(id, file);
 
     addNote({
       id,

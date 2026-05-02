@@ -7,4 +7,5 @@ interface CloudflareEnv {
   GOOGLE_CLIENT_SECRET: string;
   JWT_SECRET: string;
   DB: D1Database;
+  AUDIO_BUCKET: R2Bucket;
 }
