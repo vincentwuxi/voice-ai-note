@@ -151,11 +151,12 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const [currentTime, setCurrentTime] = useState(0);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editSummary, setEditSummary] = useState('');
   const [editKeyPoints, setEditKeyPoints] = useState<string[]>([]);
   const [editActionItems, setEditActionItems] = useState<string[]>([]);
-  const { updateNote } = useAppStore();
+  const { updateNote, deleteNote } = useAppStore();
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const note = notes.find((n) => n.id === id);
@@ -268,6 +269,11 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
 
   const cancelEditing = () => setIsEditing(false);
 
+  const handleDelete = () => {
+    deleteNote(id);
+    router.push('/library');
+  };
+
   return (
     <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-10">
       <audio ref={audioRef} preload="metadata" />
@@ -331,6 +337,14 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
               </div>
             )}
           </div>
+          {/* Delete */}
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="p-2 rounded-lg bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors cursor-pointer"
+            title="删除笔记"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -532,6 +546,44 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowDeleteConfirm(false)}
+          />
+          <div className="relative card p-6 w-full max-w-sm border border-white/10 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-[var(--color-error)]/15 flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-[var(--color-error)]" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-[var(--color-text-primary)]">确认删除</h3>
+                <p className="text-xs text-[var(--color-text-tertiary)]">此操作不可撤销</p>
+              </div>
+            </div>
+            <p className="text-sm text-[var(--color-text-secondary)] mb-6">
+              确定要删除「<span className="text-[var(--color-text-primary)] font-medium">{note.title.slice(0, 30)}</span>」吗？录音文件和 AI 摘要都将被永久删除。
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-[var(--color-text-secondary)] bg-[var(--color-bg-surface)] hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-[var(--color-error)] hover:brightness-110 transition-all cursor-pointer"
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

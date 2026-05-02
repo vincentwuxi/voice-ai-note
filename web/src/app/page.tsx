@@ -1,9 +1,10 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Mic, Pause, Play, Square, Shield, Trash2, Wand2, Upload } from 'lucide-react';
+import { Mic, Pause, Play, Square, Shield, Trash2, Wand2, Upload, CheckCircle2, ExternalLink } from 'lucide-react';
 import { useAppStore, RecordingMode, AI_TEMPLATES, AITemplate, MODE_TEMPLATE_MAP } from '@/store/app-store';
 import { saveAudioBlob } from '@/services/db';
+import { useRouter } from 'next/navigation';
 
 const modes: { id: RecordingMode; label: string; sublabel: string }[] = [
   { id: 'thoughts', label: '所思所想', sublabel: 'Thoughts' },
@@ -30,6 +31,8 @@ export default function RecordPage() {
   const [analyserData, setAnalyserData] = useState<number[]>(new Array(64).fill(0));
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [toast, setToast] = useState<{ noteId: string; message: string } | null>(null);
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -250,6 +253,10 @@ export default function RecordPage() {
       cancelAnimationFrame(animFrameRef.current);
       setLiveTranscript('');
 
+      // Show toast
+      setToast({ noteId: id, message: '录音已保存，AI 正在处理中...' });
+      setTimeout(() => setToast(null), 6000);
+
       // Async: WhisperX transcription + LLM summarization
       (async () => {
         const store = useAppStore.getState();
@@ -413,6 +420,10 @@ export default function RecordPage() {
         store.updateNote(id, { title: `转录失败: ${file.name}`, content: `WhisperX 转录出错: ${err instanceof Error ? err.message : '未知错误'}`, summary: '转录失败，请检查 WhisperX 服务', isProcessing: false, updatedAt: new Date() });
       }
     })();
+
+    // Show toast for upload
+    setToast({ noteId: id, message: '音频已上传，AI 正在转录中...' });
+    setTimeout(() => setToast(null), 6000);
   };
 
   const currentTemplate = AI_TEMPLATES[selectedTemplate];
@@ -577,6 +588,22 @@ export default function RecordPage() {
         <Shield className="w-3.5 h-3.5" />
         <span>End-to-end encrypted · 本地持久化存储</span>
       </div>
+
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-24 lg:bottom-8 left-1/2 -translate-x-1/2 z-50 animate-[slideUp_0.3s_ease-out]">
+          <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-[var(--color-bg-card)] border border-white/10 shadow-2xl backdrop-blur-xl">
+            <CheckCircle2 className="w-5 h-5 text-[var(--color-success)] flex-shrink-0" />
+            <span className="text-sm text-[var(--color-text-primary)]">{toast.message}</span>
+            <button
+              onClick={() => { router.push(`/library/${toast.noteId}`); setToast(null); }}
+              className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold text-[var(--color-primary)] bg-[var(--color-primary)]/10 hover:bg-[var(--color-primary)]/20 transition-colors cursor-pointer whitespace-nowrap"
+            >
+              查看笔记 <ExternalLink className="w-3 h-3" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -158,69 +158,7 @@ interface AppState {
   isHydrated: boolean;
 }
 
-// Demo data
-const DEMO_NOTES: Note[] = [
-  {
-    id: 'demo-1',
-    title: '关于新产品线的营销策略讨论',
-    content: '',
-    summary: '讨论了 Z 世代消费者的社交媒体营销策略，决定加大小红书和抖音投入，制定 Q2 预算计划。',
-    keyPoints: ['社交媒体矩阵布局', 'KOL 合作策略', 'Z 世代消费者画像', 'Q2 预算分配'],
-    actionItems: ['制定 Q2 营销预算', '联系 KOL 团队', '准备小红书内容计划'],
-    tags: ['project'],
-    mode: 'meeting',
-    duration: 923,
-    segments: [
-      { start: 0.5, end: 4.2, text: '大家好，今天的会议主要讨论 Q2 营销策略的调整方向。', speaker: 'SPEAKER_00' },
-      { start: 4.8, end: 9.1, text: '好的，我先汇报一下市场调研的结果。针对 Z 世代消费者，我们发现社交媒体是最关键的触达渠道。', speaker: 'SPEAKER_01' },
-      { start: 9.5, end: 13.8, text: '能具体说说哪些平台的表现最好吗？', speaker: 'SPEAKER_02' },
-      { start: 14.2, end: 20.5, text: '根据数据，小红书的转化率最高，其次是抖音。我们建议加大在这两个平台的投入。', speaker: 'SPEAKER_01' },
-      { start: 21.0, end: 26.3, text: '同意。我补充一点，KOL 合作策略也需要重新规划。目前的 ROI 不太理想。', speaker: 'SPEAKER_00' },
-      { start: 27.0, end: 32.1, text: '那我们是不是需要先制定一个详细的 Q2 预算方案？', speaker: 'SPEAKER_02' },
-      { start: 32.8, end: 38.0, text: '对，会后我来整理预算草案，下周一之前发给大家审阅。', speaker: 'SPEAKER_00' },
-    ],
-    speakerCount: 3,
-    language: 'zh',
-    createdAt: new Date('2026-03-15T10:30:00'),
-    updatedAt: new Date('2026-03-15T10:30:00'),
-    isProcessing: false,
-  },
-  {
-    id: 'demo-2',
-    title: '产品功能灵感：语音转知识图谱',
-    content: '突然想到可以将多次录音的内容自动关联起来，形成一个知识图谱。当用户录音提到之前的话题时，系统可以自动推荐相关笔记...',
-    summary: '语音笔记自动关联为知识图谱的产品构想，通过语义分析连接不同录音内容。',
-    keyPoints: ['知识图谱自动构建', '语义关联', '历史笔记推荐'],
-    actionItems: ['调研知识图谱技术方案'],
-    tags: ['inspiration'],
-    mode: 'thoughts',
-    duration: 187,
-    segments: [
-      { start: 0.0, end: 12.5, text: '突然想到可以将多次录音的内容自动关联起来，形成一个知识图谱。', speaker: 'SPEAKER_00' },
-    ],
-    speakerCount: 1,
-    language: 'zh',
-    createdAt: new Date('2026-03-14T15:45:00'),
-    updatedAt: new Date('2026-03-14T15:45:00'),
-    isProcessing: false,
-  },
-  {
-    id: 'demo-3',
-    title: '《原子习惯》关键要点',
-    content: '读完第三章，核心观点：习惯的形成基于四步循环 - 提示、渴求、反应、奖赏。最有效的改变方式是改变身份认同...',
-    summary: '《原子习惯》第三章：习惯四步循环和身份认同驱动的行为改变方法。',
-    keyPoints: ['四步循环：提示→渴求→反应→奖赏', '身份认同驱动改变', '环境设计的重要性'],
-    actionItems: ['实践两分钟法则', '设计习惯追踪表'],
-    tags: ['reading'],
-    mode: 'lecture',
-    duration: 305,
-    segments: [],
-    speakerCount: 1,
-    createdAt: new Date('2026-03-12T20:15:00'),
-    updatedAt: new Date('2026-03-12T20:15:00'),
-    isProcessing: false,
-  },
-];
+
 
 export const useAppStore = create<AppState>((set, get) => ({
   // Navigation
@@ -244,7 +182,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   setSelectedTemplate: (t) => set({ selectedTemplate: t }),
 
   // Notes
-  notes: DEMO_NOTES,
+  notes: [],
   selectedNoteId: null,
   addNote: (note) => {
     set((s) => ({ notes: [note, ...s.notes] }));
@@ -266,15 +204,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadNotesFromDB: async () => {
     try {
       const dbNotes = await getAllNotes();
-      if (dbNotes.length > 0) {
-        set({ notes: dbNotes, isHydrated: true });
-      } else {
-        // First time: save demo notes to DB
-        for (const note of DEMO_NOTES) {
-          await saveNote(note);
-        }
-        set({ isHydrated: true });
-      }
+      set({ notes: dbNotes, isHydrated: true });
     } catch {
       set({ isHydrated: true });
     }
