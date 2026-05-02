@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
-import { Search, LayoutGrid, List, Clock, Play, Users } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Search, Play, Users, Trash2, X, AlertTriangle } from 'lucide-react';
 import { useAppStore, NoteTag } from '@/store/app-store';
 import { useRouter } from 'next/navigation';
 
@@ -33,8 +33,15 @@ function formatDate(date: Date): string {
 }
 
 export default function LibraryPage() {
-  const { notes, activeTagFilter, setActiveTagFilter, searchQuery, setSearchQuery } = useAppStore();
+  const { notes, activeTagFilter, setActiveTagFilter, searchQuery, setSearchQuery, deleteNote } = useAppStore();
   const router = useRouter();
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await deleteNote(deleteTarget.id);
+    setDeleteTarget(null);
+  };
 
   const filteredNotes = useMemo(() => {
     return notes.filter((note) => {
@@ -97,50 +104,102 @@ export default function LibraryPage() {
             const tag = note.tags[0];
             const config = tag ? tagConfig[tag] : null;
             return (
-              <button
-                key={note.id}
-                onClick={() => router.push(`/library/${note.id}`)}
-                className="card p-5 text-left cursor-pointer group"
-              >
-                {/* Tag Badge */}
-                {config && (
-                  <span
-                    className="inline-flex px-2.5 py-1 rounded-md text-xs font-medium mb-3"
-                    style={{ color: config.color, backgroundColor: config.bgColor }}
-                  >
-                    {config.label}
-                  </span>
-                )}
+              <div key={note.id} className="card p-5 text-left cursor-pointer group relative">
+                {/* Delete Button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDeleteTarget({ id: note.id, title: note.title });
+                  }}
+                  className="absolute top-3 right-3 p-1.5 rounded-lg text-[var(--color-text-tertiary)] opacity-0 group-hover:opacity-100 hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-all cursor-pointer z-10"
+                  title="删除笔记"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
 
-                {/* Title */}
-                <h3 className="text-base font-semibold text-[var(--color-text-primary)] mb-2 line-clamp-2 group-hover:text-[var(--color-primary)] transition-colors">
-                  {note.isProcessing ? '🔄 AI 处理中...' : note.title}
-                </h3>
+                {/* Clickable card body */}
+                <div onClick={() => router.push(`/library/${note.id}`)}>
+                  {/* Tag Badge */}
+                  {config && (
+                    <span
+                      className="inline-flex px-2.5 py-1 rounded-md text-xs font-medium mb-3"
+                      style={{ color: config.color, backgroundColor: config.bgColor }}
+                    >
+                      {config.label}
+                    </span>
+                  )}
 
-                {/* Preview */}
-                <p className="text-sm text-[var(--color-text-secondary)] line-clamp-3 mb-4">
-                  {note.isProcessing ? '正在转录和分析...' : note.summary}
-                </p>
+                  {/* Title */}
+                  <h3 className="text-base font-semibold text-[var(--color-text-primary)] mb-2 line-clamp-2 group-hover:text-[var(--color-primary)] transition-colors pr-6">
+                    {note.isProcessing ? '🔄 AI 处理中...' : note.title}
+                  </h3>
 
-                {/* Footer */}
-                <div className="flex items-center justify-between text-xs text-[var(--color-text-tertiary)]">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-1.5">
-                      <Play className="w-3 h-3" />
-                      <span>{formatDuration(note.duration)}</span>
-                    </div>
-                    {note.speakerCount > 1 && (
-                      <div className="flex items-center gap-1 text-[var(--color-tag-blue)]">
-                        <Users className="w-3 h-3" />
-                        <span>{note.speakerCount}</span>
+                  {/* Preview */}
+                  <p className="text-sm text-[var(--color-text-secondary)] line-clamp-3 mb-4">
+                    {note.isProcessing ? '正在转录和分析...' : note.summary}
+                  </p>
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between text-xs text-[var(--color-text-tertiary)]">
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <Play className="w-3 h-3" />
+                        <span>{formatDuration(note.duration)}</span>
                       </div>
-                    )}
+                      {note.speakerCount > 1 && (
+                        <div className="flex items-center gap-1 text-[var(--color-tag-blue)]">
+                          <Users className="w-3 h-3" />
+                          <span>{note.speakerCount}</span>
+                        </div>
+                      )}
+                    </div>
+                    <span>{formatDate(note.createdAt)}</span>
                   </div>
-                  <span>{formatDate(note.createdAt)}</span>
                 </div>
-              </button>
+              </div>
             );
           })}
+        </div>
+      )}
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setDeleteTarget(null)}
+          />
+          {/* Dialog */}
+          <div className="relative card p-6 w-full max-w-sm border border-white/10 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-[var(--color-error)]/15 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-[var(--color-error)]" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold text-[var(--color-text-primary)]">确认删除</h3>
+                <p className="text-xs text-[var(--color-text-tertiary)]">此操作不可撤销</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-[var(--color-text-secondary)] mb-6">
+              确定要删除「<span className="text-[var(--color-text-primary)] font-medium">{deleteTarget.title.slice(0, 30)}</span>」吗？录音文件和 AI 摘要都将被永久删除。
+            </p>
+
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-[var(--color-text-secondary)] bg-[var(--color-bg-surface)] hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-[var(--color-error)] hover:brightness-110 transition-all cursor-pointer"
+              >
+                删除
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
