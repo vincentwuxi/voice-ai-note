@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { Search, Play, Users, Trash2, X, AlertTriangle, ArrowUpDown } from 'lucide-react';
+import { Search, Play, Users, Trash2, X, AlertTriangle, ArrowUpDown, Cloud, CloudOff, Loader2 } from 'lucide-react';
 import { useAppStore, NoteTag } from '@/store/app-store';
 import { useRouter } from 'next/navigation';
 
@@ -205,6 +205,11 @@ export default function LibraryPage() {
                       )}
                     </div>
                     <span>{formatDate(note.createdAt)}</span>
+                    {/* Sync Status */}
+                    {note.syncStatus === 'synced' && <span title="已同步"><Cloud className="w-3 h-3 text-[var(--color-success)]" /></span>}
+                    {note.syncStatus === 'syncing' && <span title="同步中"><Loader2 className="w-3 h-3 text-[var(--color-primary)] animate-spin" /></span>}
+                    {note.syncStatus === 'failed' && <span title="同步失败"><CloudOff className="w-3 h-3 text-[var(--color-error)]" /></span>}
+                    {note.syncStatus === 'local' && <span title="仅本地"><CloudOff className="w-3 h-3 opacity-30" /></span>}
                   </div>
                 </div>
               </div>

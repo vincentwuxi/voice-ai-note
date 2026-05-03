@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useCallback } from 'react';
-import { ArrowLeft, Play, Pause, Share2, Download, Square, Pencil, Users, Mic, FileText, FileJson, Subtitles, Edit3, Check, X, Plus, Trash2, RefreshCw, Loader2 } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Share2, Download, Square, CheckSquare, Pencil, Users, Mic, FileText, FileJson, Subtitles, Edit3, Check, X, Plus, Trash2, RefreshCw, Loader2 } from 'lucide-react';
 import { useAppStore, NoteTag, TranscriptSegment, AI_TEMPLATES, AITemplate } from '@/store/app-store';
 import { getAudioBlob, exportToMarkdown, exportToSRT, exportToJSON } from '@/services/db';
 import { useRouter } from 'next/navigation';
@@ -159,6 +159,7 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const [editSummary, setEditSummary] = useState('');
   const [editKeyPoints, setEditKeyPoints] = useState<string[]>([]);
   const [editActionItems, setEditActionItems] = useState<string[]>([]);
+  const [completedTodos, setCompletedTodos] = useState<Set<number>>(new Set());
   const { updateNote, deleteNote } = useAppStore();
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -559,11 +560,27 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
                 </div>
               ) : (
                 <ul className="space-y-2.5">
-                  {note.actionItems.map((item, i) => (
-                    <li key={i} className="flex items-center gap-2.5 text-sm text-[var(--color-text-secondary)] cursor-pointer hover:text-[var(--color-text-primary)] transition-colors">
-                      <Square className="w-4 h-4 text-[var(--color-success)] shrink-0" /> {item}
-                    </li>
-                  ))}
+                  {note.actionItems.map((item, i) => {
+                    const done = completedTodos.has(i);
+                    return (
+                      <li
+                        key={i}
+                        onClick={() => {
+                          const next = new Set(completedTodos);
+                          if (done) next.delete(i); else next.add(i);
+                          setCompletedTodos(next);
+                        }}
+                        className={`flex items-center gap-2.5 text-sm cursor-pointer transition-all ${done ? 'text-[var(--color-text-tertiary)] line-through opacity-60' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
+                      >
+                        {done ? (
+                          <CheckSquare className="w-4 h-4 text-[var(--color-success)] shrink-0" />
+                        ) : (
+                          <Square className="w-4 h-4 text-[var(--color-success)] shrink-0" />
+                        )}
+                        {item}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>

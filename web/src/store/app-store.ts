@@ -7,12 +7,37 @@ export type RecordingMode = 'thoughts' | 'meeting' | 'lecture' | 'interview' | '
 export type NoteTag = 'inspiration' | 'project' | 'personal' | 'reading' | 'design';
 export type AITemplate = 'meeting' | 'reading' | 'brainstorm' | 'interview' | 'journal' | 'auto';
 
+// Sync note to D1 cloud — updates syncStatus in store
+function syncNoteToCloud(note: Note) {
+  fetch('/api/notes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      note: {
+        ...note,
+        createdAt: note.createdAt instanceof Date ? note.createdAt.toISOString() : note.createdAt,
+        updatedAt: note.updatedAt instanceof Date ? note.updatedAt.toISOString() : note.updatedAt,
+      }
+    }),
+  }).then(res => {
+    if (res.ok) {
+      useAppStore.getState().markSynced(note.id);
+    } else {
+      useAppStore.getState().markSyncFailed(note.id);
+    }
+  }).catch(() => {
+    useAppStore.getState().markSyncFailed(note.id);
+  });
+}
+
 export interface TranscriptSegment {
   start: number;
   end: number;
   text: string;
   speaker?: string;
 }
+
+export type SyncStatus = 'synced' | 'syncing' | 'failed' | 'local';
 
 export interface Note {
   id: string;
@@ -31,6 +56,7 @@ export interface Note {
   createdAt: Date;
   updatedAt: Date;
   isProcessing: boolean;
+  syncStatus?: SyncStatus;
 }
 
 export const AI_TEMPLATES: Record<AITemplate, { label: string; icon: string; prompt: string }> = {
@@ -132,6 +158,8 @@ interface AppState {
   deleteNote: (id: string) => void;
   setSelectedNoteId: (id: string | null) => void;
   loadNotesFromDB: () => Promise<void>;
+  markSynced: (id: string) => void;
+  markSyncFailed: (id: string) => void;
 
   // Speaker Names (noteId → { SPEAKER_00: "张总", ... })
   speakerNames: Record<string, Record<string, string>>;
@@ -185,26 +213,63 @@ export const useAppStore = create<AppState>((set, get) => ({
   notes: [],
   selectedNoteId: null,
   addNote: (note) => {
-    set((s) => ({ notes: [note, ...s.notes] }));
-    saveNote(note).catch(console.error);
+    const n = { ...note, syncStatus: 'syncing' as SyncStatus };
+    set((s) => ({ notes: [n, ...s.notes] }));
+    saveNote(n).catch(console.error);
+    syncNoteToCloud(n);
   },
   updateNote: (id, updates) => {
     set((s) => ({
-      notes: s.notes.map((n) => (n.id === id ? { ...n, ...updates } : n)),
+      notes: s.notes.map((n) => (n.id === id ? { ...n, ...updates, syncStatus: 'syncing' as SyncStatus } : n)),
     }));
-    // Persist to IndexedDB
     const updated = get().notes.find(n => n.id === id);
-    if (updated) saveNote(updated).catch(console.error);
+    if (updated) {
+      saveNote(updated).catch(console.error);
+      syncNoteToCloud(updated);
+    }
   },
   deleteNote: (id) => {
     set((s) => ({ notes: s.notes.filter((n) => n.id !== id) }));
     deleteNoteById(id).catch(console.error);
+    fetch('/api/notes', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    }).catch(console.warn);
+    fetch(`/api/audio/${id}`, { method: 'DELETE' }).catch(console.warn);
   },
   setSelectedNoteId: (id) => set({ selectedNoteId: id }),
+  markSynced: (id) => {
+    set((s) => ({
+      notes: s.notes.map((n) => (n.id === id ? { ...n, syncStatus: 'synced' as SyncStatus } : n)),
+    }));
+  },
+  markSyncFailed: (id) => {
+    set((s) => ({
+      notes: s.notes.map((n) => (n.id === id ? { ...n, syncStatus: 'failed' as SyncStatus } : n)),
+    }));
+  },
   loadNotesFromDB: async () => {
     try {
+      const res = await fetch('/api/notes');
+      if (res.ok) {
+        const { notes: cloudNotes } = await res.json();
+        if (cloudNotes && cloudNotes.length > 0) {
+          const parsed = cloudNotes.map((n: Record<string, unknown>) => ({
+            ...n,
+            createdAt: new Date(n.createdAt as string),
+            updatedAt: new Date(n.updatedAt as string),
+            syncStatus: 'synced' as SyncStatus,
+          }));
+          set({ notes: parsed, isHydrated: true });
+          for (const note of parsed) { saveNote(note).catch(() => {}); }
+          return;
+        }
+      }
+    } catch { /* fallback */ }
+    try {
       const dbNotes = await getAllNotes();
-      set({ notes: dbNotes, isHydrated: true });
+      set({ notes: dbNotes.map(n => ({ ...n, syncStatus: 'local' as SyncStatus })), isHydrated: true });
     } catch {
       set({ isHydrated: true });
     }
