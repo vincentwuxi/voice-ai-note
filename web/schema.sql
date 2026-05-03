@@ -59,3 +59,12 @@ CREATE TABLE IF NOT EXISTS notes (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Shared note links
+CREATE TABLE IF NOT EXISTS shared_notes (
+  share_id TEXT PRIMARY KEY,
+  note_id TEXT NOT NULL,
+  user_email TEXT NOT NULL,
+  expires_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

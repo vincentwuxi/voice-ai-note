@@ -160,6 +160,8 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const [editKeyPoints, setEditKeyPoints] = useState<string[]>([]);
   const [editActionItems, setEditActionItems] = useState<string[]>([]);
   const [completedTodos, setCompletedTodos] = useState<Set<number>>(new Set());
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [isSharing, setIsSharing] = useState(false);
   const { updateNote, deleteNote } = useAppStore();
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -365,9 +367,33 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
               </button>
             </>
           )}
-          <button className="p-2 rounded-lg bg-[var(--color-bg-card)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors cursor-pointer">
-            <Share2 className="w-4 h-4" />
+          <button
+            onClick={async () => {
+              setIsSharing(true);
+              try {
+                const res = await fetch('/api/share', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ noteId: id, expiresInDays: 7 }),
+                });
+                if (res.ok) {
+                  const { shareId } = await res.json();
+                  const url = `${window.location.origin}/share/${shareId}`;
+                  await navigator.clipboard.writeText(url);
+                  setShareLink(url);
+                  setTimeout(() => setShareLink(null), 4000);
+                }
+              } catch { /* ignore */ }
+              setIsSharing(false);
+            }}
+            className={`p-2 rounded-lg bg-[var(--color-bg-card)] transition-colors cursor-pointer ${shareLink ? 'text-[var(--color-success)]' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
+            title={shareLink || '生成分享链接'}
+          >
+            {isSharing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Share2 className="w-4 h-4" />}
           </button>
+          {shareLink && (
+            <span className="text-xs text-[var(--color-success)] animate-fadeIn">链接已复制!</span>
+          )}
           <div className="relative">
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}

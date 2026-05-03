@@ -20,8 +20,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     }
   }, [isChecked, fetchUser]);
 
-  // Don't guard the login page
-  if (pathname === '/login') {
+  // Don't guard public pages
+  if (pathname === '/login' || pathname.startsWith('/share/')) {
     return <>{children}</>;
   }
 
