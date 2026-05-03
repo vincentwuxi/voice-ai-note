@@ -131,8 +131,23 @@ export default function LibraryPage() {
       {/* Notes Grid */}
       {filteredNotes.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-[var(--color-text-tertiary)]">
-          <p className="text-lg">暂无笔记</p>
-          <p className="text-sm mt-2">开始录音，创建你的第一条语音笔记</p>
+          <div className="w-16 h-16 rounded-full bg-[var(--color-primary)]/10 flex items-center justify-center mb-4">
+            <Search className="w-7 h-7 text-[var(--color-primary)] opacity-40" />
+          </div>
+          <p className="text-lg font-medium text-[var(--color-text-primary)]">
+            {searchQuery ? '没有找到匹配的笔记' : '思想库为空'}
+          </p>
+          <p className="text-sm mt-2 max-w-sm text-center">
+            {searchQuery ? `没有匹配「${searchQuery}」的笔记，试试其他关键词` : '录音或上传音频文件，AI 将自动转录并提炼要点'}
+          </p>
+          {!searchQuery && (
+            <button
+              onClick={() => router.push('/')}
+              className="mt-6 px-6 py-2.5 bg-[var(--color-primary)] text-black font-semibold rounded-xl hover:opacity-90 transition-colors cursor-pointer text-sm"
+            >
+              🎙️ 去录音
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

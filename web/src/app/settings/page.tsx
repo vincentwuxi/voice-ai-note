@@ -137,12 +137,16 @@ export default function SettingsPage() {
               <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                 <Key className="w-4 h-4" /> API 密钥
               </label>
-              <input
-                type="text"
-                value={sharedConfig.apiKey || '未配置'}
-                readOnly
-                className={readOnlyClass}
-              />
+              <div className={`${readOnlyClass} flex items-center gap-2`}>
+                {sharedConfig.apiKey ? (
+                  <>
+                    <Check className="w-4 h-4 text-[var(--color-success)] flex-shrink-0" />
+                    <span>{sharedConfig.apiKey.slice(0, 4)}{'•'.repeat(16)}{sharedConfig.apiKey.slice(-4)}</span>
+                  </>
+                ) : (
+                  <span className="text-[var(--color-error)]">未配置</span>
+                )}
+              </div>
             </div>
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">

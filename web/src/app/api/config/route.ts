@@ -17,9 +17,9 @@ export async function GET(request: NextRequest) {
 
   const config: Record<string, string> = {};
   for (const row of rows.results) {
-    // Mask API key for non-admin users
-    if (row.key === 'apiKey' && user.role !== 'admin') {
-      config[row.key] = row.value ? `${row.value.slice(0, 6)}${'*'.repeat(20)}` : '';
+    // Always mask API key — full key only available via /api/admin/config
+    if (row.key === 'apiKey') {
+      config[row.key] = row.value ? `${row.value.slice(0, 4)}${'*'.repeat(20)}${row.value.slice(-4)}` : '';
     } else {
       config[row.key] = row.value;
     }

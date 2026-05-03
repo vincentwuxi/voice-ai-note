@@ -39,3 +39,23 @@ CREATE TABLE IF NOT EXISTS audio_files (
   r2_key TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- Notes cloud storage
+CREATE TABLE IF NOT EXISTS notes (
+  id TEXT PRIMARY KEY,
+  user_email TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  content TEXT NOT NULL DEFAULT '',
+  summary TEXT NOT NULL DEFAULT '',
+  key_points TEXT NOT NULL DEFAULT '[]',
+  action_items TEXT NOT NULL DEFAULT '[]',
+  tags TEXT NOT NULL DEFAULT '[]',
+  mode TEXT NOT NULL DEFAULT 'thoughts',
+  duration INTEGER NOT NULL DEFAULT 0,
+  segments TEXT NOT NULL DEFAULT '[]',
+  speaker_count INTEGER NOT NULL DEFAULT 0,
+  language TEXT DEFAULT 'zh',
+  is_processing INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
