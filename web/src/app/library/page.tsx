@@ -7,6 +7,16 @@ import { useRouter } from 'next/navigation';
 import { exportToJSON } from '@/services/db';
 
 type SortMode = 'newest' | 'oldest' | 'longest' | 'shortest';
+type ModeFilter = 'all' | 'thoughts' | 'meeting' | 'lecture' | 'interview' | 'journal';
+
+const modeFilters: { id: ModeFilter; label: string }[] = [
+  { id: 'all', label: '全部' },
+  { id: 'meeting', label: '💼 会议' },
+  { id: 'interview', label: '🎤 访谈' },
+  { id: 'thoughts', label: '💡 灵感' },
+  { id: 'lecture', label: '📚 讲座' },
+  { id: 'journal', label: '📓 日记' },
+];
 
 const tagConfig: Record<NoteTag, { label: string; color: string; bgColor: string }> = {
   inspiration: { label: '灵感', color: 'var(--color-tag-amber)', bgColor: 'rgba(245, 158, 11, 0.15)' },
@@ -40,6 +50,7 @@ export default function LibraryPage() {
   const router = useRouter();
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>('newest');
+  const [modeFilter, setModeFilter] = useState<ModeFilter>('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchMode, setBatchMode] = useState(false);
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
@@ -144,6 +155,7 @@ export default function LibraryPage() {
     const q = searchQuery.toLowerCase();
     const filtered = notes.filter((note) => {
       if (activeTagFilter !== 'all' && !note.tags.includes(activeTagFilter)) return false;
+      if (modeFilter !== 'all' && note.mode !== modeFilter) return false;
       if (q) {
         const searchFields = [
           note.title, note.content, note.summary,
@@ -161,7 +173,7 @@ export default function LibraryPage() {
         default: return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
       }
     });
-  }, [notes, activeTagFilter, searchQuery, sortMode]);
+  }, [notes, activeTagFilter, searchQuery, sortMode, modeFilter]);
 
   return (
     <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10">
@@ -283,6 +295,23 @@ export default function LibraryPage() {
         })}
       </div>
 
+      {/* Mode Filters */}
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 scrollbar-none">
+        {modeFilters.map((m) => (
+          <button
+            key={m.id}
+            onClick={() => setModeFilter(m.id)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all cursor-pointer ${
+              modeFilter === m.id
+                ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)] border border-[var(--color-primary)]/30'
+                : 'bg-[var(--color-bg-card)] text-[var(--color-text-tertiary)] hover:text-[var(--color-text-secondary)] border border-transparent'
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
       {/* Notes Grid */}
       {filteredNotes.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-[var(--color-text-tertiary)]">
@@ -379,6 +408,16 @@ export default function LibraryPage() {
                           <span>{note.speakerCount}</span>
                         </div>
                       )}
+                      {note.actionItems.length > 0 && (() => {
+                        const done = (note.completedTodos || []).length;
+                        const total = note.actionItems.length;
+                        return (
+                          <div className={`flex items-center gap-1 ${done === total ? 'text-[var(--color-success)]' : 'text-[var(--color-tag-amber)]'}`}>
+                            <CheckSquare className="w-3 h-3" />
+                            <span>{done}/{total}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                     <div className="flex items-center gap-2">
                       <span>{formatDate(note.createdAt)}</span>
