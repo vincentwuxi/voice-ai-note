@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Server, Key, Bot, Check, Loader2, AudioLines, Shield, Lock } from 'lucide-react';
+import { Settings as SettingsIcon, Server, Key, Bot, Check, Loader2, AudioLines, Shield, Lock, Sun, Moon, Monitor } from 'lucide-react';
 import { useAppStore } from '@/store/app-store';
 import { useAuthStore } from '@/store/auth-store';
 
 export default function SettingsPage() {
-  const { whisperxEndpoint, setWhisperxEndpoint, asrEngineMap } = useAppStore();
+  const { whisperxEndpoint, setWhisperxEndpoint, asrEngineMap, theme, setTheme } = useAppStore();
   const { user } = useAuthStore();
   const isAdmin = user?.role === 'admin';
 
@@ -141,6 +141,34 @@ export default function SettingsPage() {
             </div>
           </>
         )}
+      </div>
+
+      {/* Theme */}
+      <div className="card p-6 space-y-4 mb-6">
+        <div className="flex items-center gap-2">
+          <Sun className="w-5 h-5 text-[var(--color-tag-amber)]" />
+          <h2 className="text-lg font-semibold">外观主题</h2>
+        </div>
+        <div className="flex gap-3">
+          {[
+            { id: 'dark' as const, label: '深色', icon: Moon },
+            { id: 'light' as const, label: '浅色', icon: Sun },
+            { id: 'system' as const, label: '跟随系统', icon: Monitor },
+          ].map((opt) => (
+            <button
+              key={opt.id}
+              onClick={() => setTheme(opt.id)}
+              className={`flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-all cursor-pointer flex-1 justify-center ${
+                theme === opt.id
+                  ? 'bg-[var(--color-primary)]/15 text-[var(--color-primary)] border border-[var(--color-primary)]/30'
+                  : 'bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] border border-transparent hover:border-white/10'
+              }`}
+            >
+              <opt.icon className="w-4 h-4" />
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* About */}

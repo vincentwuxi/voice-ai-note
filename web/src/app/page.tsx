@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Mic, Pause, Play, Square, Shield, Trash2, Wand2, Upload, CheckCircle2, ExternalLink, Globe, Loader2, AlertCircle, RotateCcw } from 'lucide-react';
 import { useAppStore, RecordingMode, AI_TEMPLATES, AITemplate, MODE_TEMPLATE_MAP } from '@/store/app-store';
-import { saveAudioBlob } from '@/services/db';
+import { saveAudioBlob, saveRecordingDraft, loadRecordingDraft, clearRecordingDraft } from '@/services/db';
 import { useRouter } from 'next/navigation';
 
 // Upload audio to R2 cloud storage (fire-and-forget)
@@ -67,6 +67,8 @@ export default function RecordPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+  const draftIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [draftRecovery, setDraftRecovery] = useState<{ chunks: Blob[]; mode: string; template: string; elapsed: number } | null>(null);
 
   // Timer
   useEffect(() => {
@@ -77,6 +79,15 @@ export default function RecordPage() {
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRecording, isPaused, setElapsedTime]);
+
+  // P2-8: Check for recording draft on mount
+  useEffect(() => {
+    loadRecordingDraft().then(draft => {
+      if (draft && draft.chunks && draft.chunks.length > 0) {
+        setDraftRecovery({ chunks: draft.chunks, mode: draft.mode, template: draft.template, elapsed: draft.elapsedTime });
+      }
+    }).catch(() => {});
+  }, []);
 
   // Waveform drawing
   const drawWaveform = useCallback(() => {
@@ -213,6 +224,21 @@ export default function RecordPage() {
       setElapsedTime(0);
       setLiveTranscript('');
 
+      // P2-8: Periodic draft save every 10 seconds
+      draftIntervalRef.current = setInterval(() => {
+        const chunks = audioChunksRef.current;
+        if (chunks.length > 0) {
+          const store = useAppStore.getState();
+          saveRecordingDraft({
+            chunks: [...chunks],
+            mode: store.recordingMode,
+            template: store.selectedTemplate,
+            elapsedTime: store.elapsedTime,
+            savedAt: new Date().toISOString(),
+          }).catch(() => {});
+        }
+      }, 10000);
+
       cancelAnimationFrame(animFrameRef.current);
       drawWaveform();
 
@@ -278,6 +304,10 @@ export default function RecordPage() {
       setIsPaused(false);
       cancelAnimationFrame(animFrameRef.current);
       setLiveTranscript('');
+
+      // P2-8: Clear draft
+      if (draftIntervalRef.current) { clearInterval(draftIntervalRef.current); draftIntervalRef.current = null; }
+      clearRecordingDraft().catch(() => {});
 
       // Show progress toast
       const showProgress = (stage: ProcessingStage, msg: string, retryFn?: () => void) => {
@@ -350,6 +380,9 @@ export default function RecordPage() {
     setElapsedTime(0);
     setLiveTranscript('');
     cancelAnimationFrame(animFrameRef.current);
+    // P2-8: Clear draft
+    if (draftIntervalRef.current) { clearInterval(draftIntervalRef.current); draftIntervalRef.current = null; }
+    clearRecordingDraft().catch(() => {});
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -454,6 +487,79 @@ export default function RecordPage() {
       <h1 className="text-xl font-semibold text-[var(--color-text-secondary)] mb-8 lg:mb-12">
         Recording Workspace
       </h1>
+
+      {/* P2-8: Draft Recovery Banner */}
+      {draftRecovery && !isRecording && (
+        <div className="w-full max-w-md mb-6 px-5 py-4 rounded-2xl bg-[var(--color-tag-amber)]/10 border border-[var(--color-tag-amber)]/30 animate-[slideUp_0.3s_ease-out]">
+          <div className="flex items-center gap-3 mb-3">
+            <AlertCircle className="w-5 h-5 text-[var(--color-tag-amber)] flex-shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-[var(--color-text-primary)]">发现未完成的录音</p>
+              <p className="text-xs text-[var(--color-text-tertiary)]">录时 {formatTime(draftRecovery.elapsed)} · {new Date().toLocaleDateString()}</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                // Process the recovered draft as if it was a completed recording
+                const blob = new Blob(draftRecovery.chunks, { type: 'audio/webm' });
+                const id = Date.now().toString();
+                const now = new Date();
+                saveAudioBlob(id, blob).catch(console.error);
+                uploadToR2(id, blob);
+                addNote({
+                  id, title: '恢复的录音', content: '正在转录中...', summary: '正在处理...', keyPoints: [], actionItems: [],
+                  tags: ['inspiration'], mode: draftRecovery.mode as RecordingMode, duration: draftRecovery.elapsed,
+                  audioUrl: URL.createObjectURL(blob), segments: [], speakerCount: 0, createdAt: now, updatedAt: now, isProcessing: true,
+                });
+                setDraftRecovery(null);
+                clearRecordingDraft().catch(() => {});
+                setToast({ noteId: id, message: '📦 恢复录音已保存，正在转录...', type: 'processing', stage: 'transcribing' });
+                // Trigger ASR pipeline
+                (async () => {
+                  const store = useAppStore.getState();
+                  try {
+                    const { transcribeWithWhisperX, transcribeWithQwen3, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
+                    const { getSharedLLMConfig } = await import('@/services/shared-config');
+                    const engineForMode = store.asrEngineMap[draftRecovery.mode as RecordingMode] || 'qwen3';
+                    const wxResult = engineForMode === 'qwen3'
+                      ? await transcribeWithQwen3(blob, store.qwenAsrEndpoint)
+                      : await transcribeWithWhisperX(blob, store.whisperxEndpoint, { diarize: draftRecovery.mode === 'meeting' || draftRecovery.mode === 'interview' });
+                    const segments = wxResult.segments.map(s => ({ start: s.start, end: s.end, text: s.text, speaker: s.speaker }));
+                    const fullText = segmentsToTranscript(segments);
+                    const speakers = new Set(segments.map(s => s.speaker).filter(Boolean));
+                    store.updateNote(id, { content: fullText, segments, speakerCount: speakers.size, language: wxResult.language });
+                    const llmConfig = await getSharedLLMConfig();
+                    if (llmConfig.apiEndpoint && llmConfig.apiKey) {
+                      setToast({ noteId: id, message: '✨ AI 正在生成摘要...', type: 'processing', stage: 'summarizing' });
+                      try {
+                        const tmplKey = (draftRecovery.template as AITemplate) || 'auto';
+                        const aiResult = await summarizeWithLLM(fullText, tmplKey, llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel);
+                        store.updateNote(id, { title: aiResult.title, summary: aiResult.summary, keyPoints: aiResult.keyPoints, actionItems: aiResult.actionItems, isProcessing: false, updatedAt: new Date() });
+                      } catch { store.updateNote(id, { title: '恢复的录音', summary: fullText.slice(0, 200), isProcessing: false, updatedAt: new Date() }); }
+                    } else { store.updateNote(id, { title: '恢复的录音', summary: fullText.slice(0, 200), isProcessing: false, updatedAt: new Date() }); }
+                    setToast({ noteId: id, message: '✅ 恢复录音处理完成', type: 'success', stage: 'done' });
+                    setTimeout(() => setToast(null), 4000);
+                  } catch (err) {
+                    const errMsg = err instanceof Error ? err.message : '未知错误';
+                    store.updateNote(id, { title: '恢复的录音', content: `转录出错: ${errMsg}`, summary: '转录失败', isProcessing: false, updatedAt: new Date() });
+                    setToast({ noteId: id, message: `❌ 转录失败: ${errMsg.slice(0, 60)}`, type: 'error', stage: 'error' });
+                  }
+                })();
+              }}
+              className="flex-1 px-4 py-2 rounded-xl text-sm font-semibold bg-[var(--color-primary)] text-black hover:brightness-110 transition-all cursor-pointer"
+            >
+              恢复并转录
+            </button>
+            <button
+              onClick={() => { setDraftRecovery(null); clearRecordingDraft().catch(() => {}); }}
+              className="px-4 py-2 rounded-xl text-sm font-medium bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] hover:text-[var(--color-error)] transition-colors cursor-pointer"
+            >
+              丢弃
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Timer */}
       <div className="text-6xl lg:text-8xl font-bold tracking-tight mb-2 tabular-nums">

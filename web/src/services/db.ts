@@ -248,3 +248,44 @@ function formatSRTTime(s: number): string {
   const ms = Math.floor((s % 1) * 1000);
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')},${ms.toString().padStart(3, '0')}`;
 }
+
+// ===== P2-8: Recording Draft Persistence =====
+
+export interface RecordingDraft {
+  id: string;   // always 'current-draft'
+  chunks: Blob[];
+  mode: string;
+  template: string;
+  elapsedTime: number;
+  savedAt: string;
+}
+
+export async function saveRecordingDraft(draft: Omit<RecordingDraft, 'id'>): Promise<void> {
+  const db = await openDB();
+  const tx = db.transaction(STORES.config, 'readwrite');
+  tx.objectStore(STORES.config).put({ key: 'recording-draft', ...draft, id: 'recording-draft' });
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function loadRecordingDraft(): Promise<RecordingDraft | null> {
+  const db = await openDB();
+  const tx = db.transaction(STORES.config, 'readonly');
+  const req = tx.objectStore(STORES.config).get('recording-draft');
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function clearRecordingDraft(): Promise<void> {
+  const db = await openDB();
+  const tx = db.transaction(STORES.config, 'readwrite');
+  tx.objectStore(STORES.config).delete('recording-draft');
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}

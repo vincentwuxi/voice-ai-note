@@ -187,6 +187,10 @@ interface AppState {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
 
+  // Theme
+  theme: 'dark' | 'light' | 'system';
+  setTheme: (theme: 'dark' | 'light' | 'system') => void;
+
   // Hydrated
   isHydrated: boolean;
 }
@@ -197,6 +201,17 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Navigation
   activeTab: 'record',
   setActiveTab: (tab) => set({ activeTab: tab }),
+
+  // Theme
+  theme: 'dark',
+  setTheme: (theme) => {
+    set({ theme });
+    const resolved = theme === 'system'
+      ? (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+      : theme;
+    document.documentElement.setAttribute('data-theme', resolved);
+    try { localStorage.setItem('voicemind-theme', theme); } catch {}
+  },
 
   // Recording
   isRecording: false,

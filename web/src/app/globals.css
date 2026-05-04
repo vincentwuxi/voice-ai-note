@@ -48,6 +48,41 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Light Theme Override */
+[data-theme="light"] {
+  --color-bg-deep: #F8F7F4;
+  --color-bg-card: #FFFFFF;
+  --color-bg-surface: #F0EDE8;
+  --color-bg-glass: rgba(255, 255, 255, 0.85);
+  --color-text-primary: #1A1A1A;
+  --color-text-secondary: #5A5A5A;
+  --color-text-tertiary: #999999;
+  --color-primary-glow: rgba(245, 166, 35, 0.2);
+}
+
+[data-theme="light"] .card {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] .card:hover {
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] .glass {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+
+/* Light theme: fix white/ opacity borders becoming invisible */
+[data-theme="light"] [class*="border-white/"] {
+  border-color: rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: #D4D0C8;
+}
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: #B0ACA4;
 }
 
 /* Scrollbar */
