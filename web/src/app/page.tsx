@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { Mic, Pause, Play, Square, Shield, Trash2, Wand2, Upload, CheckCircle2, ExternalLink } from 'lucide-react';
+import { Mic, Pause, Play, Square, Shield, Trash2, Wand2, Upload, CheckCircle2, ExternalLink, Globe, Loader2, AlertCircle, RotateCcw } from 'lucide-react';
 import { useAppStore, RecordingMode, AI_TEMPLATES, AITemplate, MODE_TEMPLATE_MAP } from '@/store/app-store';
 import { saveAudioBlob } from '@/services/db';
 import { useRouter } from 'next/navigation';
@@ -26,6 +26,17 @@ const modes: { id: RecordingMode; label: string; sublabel: string }[] = [
   { id: 'journal', label: '日记', sublabel: 'Journal' },
 ];
 
+const languages = [
+  { code: 'zh-CN', label: '中文', flag: '🇨🇳' },
+  { code: 'en-US', label: 'English', flag: '🇺🇸' },
+  { code: 'ja-JP', label: '日本語', flag: '🇯🇵' },
+  { code: 'ko-KR', label: '한국어', flag: '🇰🇷' },
+  { code: 'de-DE', label: 'Deutsch', flag: '🇩🇪' },
+  { code: 'fr-FR', label: 'Français', flag: '🇫🇷' },
+];
+
+type ProcessingStage = 'idle' | 'uploading' | 'transcribing' | 'summarizing' | 'done' | 'error';
+
 function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -43,7 +54,9 @@ export default function RecordPage() {
   const [analyserData, setAnalyserData] = useState<number[]>(new Array(64).fill(0));
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [toast, setToast] = useState<{ noteId: string; message: string } | null>(null);
+  const [toast, setToast] = useState<{ noteId: string; message: string; type?: 'success' | 'error' | 'processing'; stage?: ProcessingStage; onRetry?: () => void } | null>(null);
+  const [speechLang, setSpeechLang] = useState('zh-CN');
+  const [showLangMenu, setShowLangMenu] = useState(false);
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -140,7 +153,7 @@ export default function RecordPage() {
     const recognition = new SpeechRecognitionCtor();
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = 'zh-CN';
+    recognition.lang = speechLang;
 
     let accumulated = '';
 
@@ -266,19 +279,21 @@ export default function RecordPage() {
       cancelAnimationFrame(animFrameRef.current);
       setLiveTranscript('');
 
-      // Show toast
-      setToast({ noteId: id, message: '录音已保存，AI 正在处理中...' });
-      setTimeout(() => setToast(null), 6000);
+      // Show progress toast
+      const showProgress = (stage: ProcessingStage, msg: string, retryFn?: () => void) => {
+        setToast({ noteId: id, message: msg, type: stage === 'error' ? 'error' : stage === 'done' ? 'success' : 'processing', stage, onRetry: retryFn });
+      };
+      showProgress('uploading', '录音已保存，正在上传...');
 
-      // Async: ASR transcription + LLM summarization
-      (async () => {
+      // Processing pipeline with progress tracking
+      const runPipeline = async () => {
         const store = useAppStore.getState();
-
         try {
           const { transcribeWithWhisperX, transcribeWithQwen3, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
           const { getSharedLLMConfig } = await import('@/services/shared-config');
 
-          // Choose ASR engine based on recording mode
+          // Stage 1: ASR
+          showProgress('transcribing', '🎧 正在转录音频...');
           const engineForMode = store.asrEngineMap[mode] || 'qwen3';
           const wxResult = engineForMode === 'qwen3'
             ? await transcribeWithQwen3(blob, store.qwenAsrEndpoint)
@@ -289,57 +304,34 @@ export default function RecordPage() {
           const segments = wxResult.segments.map(s => ({
             start: s.start, end: s.end, text: s.text, speaker: s.speaker,
           }));
-
           const speakers = new Set(segments.map(s => s.speaker).filter(Boolean));
           const fullText = segmentsToTranscript(segments);
+          store.updateNote(id, { content: fullText, segments, speakerCount: speakers.size, language: wxResult.language });
 
-          store.updateNote(id, {
-            content: fullText,
-            segments,
-            speakerCount: speakers.size,
-            language: wxResult.language,
-          });
-
+          // Stage 2: LLM Summary
           const llmConfig = await getSharedLLMConfig();
           if (llmConfig.apiEndpoint && llmConfig.apiKey) {
+            showProgress('summarizing', '✨ AI 正在生成摘要...');
             try {
-              const aiResult = await summarizeWithLLM(
-                fullText, template, llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel
-              );
-              store.updateNote(id, {
-                title: aiResult.title,
-                summary: aiResult.summary,
-                keyPoints: aiResult.keyPoints,
-                actionItems: aiResult.actionItems,
-                isProcessing: false,
-                updatedAt: new Date(),
-              });
+              const aiResult = await summarizeWithLLM(fullText, template, llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel);
+              store.updateNote(id, { title: aiResult.title, summary: aiResult.summary, keyPoints: aiResult.keyPoints, actionItems: aiResult.actionItems, isProcessing: false, updatedAt: new Date() });
             } catch {
-              store.updateNote(id, {
-                title: segments[0]?.text?.slice(0, 30) || '语音笔记',
-                summary: fullText.slice(0, 200),
-                isProcessing: false,
-                updatedAt: new Date(),
-              });
+              store.updateNote(id, { title: segments[0]?.text?.slice(0, 30) || '语音笔记', summary: fullText.slice(0, 200), isProcessing: false, updatedAt: new Date() });
             }
           } else {
-            store.updateNote(id, {
-              title: segments[0]?.text?.slice(0, 30) || '语音笔记',
-              summary: fullText.slice(0, 200),
-              isProcessing: false,
-              updatedAt: new Date(),
-            });
+            store.updateNote(id, { title: segments[0]?.text?.slice(0, 30) || '语音笔记', summary: fullText.slice(0, 200), isProcessing: false, updatedAt: new Date() });
           }
+
+          // Done
+          showProgress('done', '✅ 处理完成');
+          setTimeout(() => setToast(null), 4000);
         } catch (err) {
-          store.updateNote(id, {
-            title: '转录失败',
-            content: `WhisperX 转录出错: ${err instanceof Error ? err.message : '未知错误'}`,
-            summary: '转录失败，请检查 WhisperX 服务是否可用',
-            isProcessing: false,
-            updatedAt: new Date(),
-          });
+          const errMsg = err instanceof Error ? err.message : '未知错误';
+          store.updateNote(id, { title: '转录失败', content: `转录出错: ${errMsg}`, summary: '转录失败，请重试', isProcessing: false, updatedAt: new Date() });
+          showProgress('error', `❌ 转录失败: ${errMsg.slice(0, 60)}`, runPipeline);
         }
-      })();
+      };
+      runPipeline();
     };
 
     mr.stop();
@@ -405,29 +397,33 @@ export default function RecordPage() {
     // Reset file input
     if (fileInputRef.current) fileInputRef.current.value = '';
 
-    // Async transcription
-    (async () => {
+    // Progress toast helper
+    const showProgress = (stage: ProcessingStage, msg: string, retryFn?: () => void) => {
+      setToast({ noteId: id, message: msg, type: stage === 'error' ? 'error' : stage === 'done' ? 'success' : 'processing', stage, onRetry: retryFn });
+    };
+
+    // Processing pipeline
+    const runPipeline = async () => {
       const store = useAppStore.getState();
       try {
         const { transcribeWithWhisperX, transcribeWithQwen3, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
         const { getSharedLLMConfig } = await import('@/services/shared-config');
 
-        // Choose ASR engine based on recording mode
+        showProgress('transcribing', '🎧 正在转录音频...');
         const engineForMode = store.asrEngineMap[mode] || 'qwen3';
         const wxResult = engineForMode === 'qwen3'
           ? await transcribeWithQwen3(file, store.qwenAsrEndpoint)
           : await transcribeWithWhisperX(file, store.whisperxEndpoint, {
               diarize: mode === 'meeting' || mode === 'interview',
             });
-        const segments = wxResult.segments.map(s => ({
-          start: s.start, end: s.end, text: s.text, speaker: s.speaker,
-        }));
+        const segments = wxResult.segments.map(s => ({ start: s.start, end: s.end, text: s.text, speaker: s.speaker }));
         const speakers = new Set(segments.map(s => s.speaker).filter(Boolean));
         const fullText = segmentsToTranscript(segments);
         store.updateNote(id, { content: fullText, segments, speakerCount: speakers.size, language: wxResult.language });
 
         const llmConfig = await getSharedLLMConfig();
         if (llmConfig.apiEndpoint && llmConfig.apiKey) {
+          showProgress('summarizing', '✨ AI 正在生成摘要...');
           try {
             const aiResult = await summarizeWithLLM(fullText, template, llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel);
             store.updateNote(id, { title: aiResult.title, summary: aiResult.summary, keyPoints: aiResult.keyPoints, actionItems: aiResult.actionItems, isProcessing: false, updatedAt: new Date() });
@@ -437,14 +433,17 @@ export default function RecordPage() {
         } else {
           store.updateNote(id, { title: segments[0]?.text?.slice(0, 30) || file.name, summary: fullText.slice(0, 200), isProcessing: false, updatedAt: new Date() });
         }
+        showProgress('done', '✅ 处理完成');
+        setTimeout(() => setToast(null), 4000);
       } catch (err) {
-        store.updateNote(id, { title: `转录失败: ${file.name}`, content: `WhisperX 转录出错: ${err instanceof Error ? err.message : '未知错误'}`, summary: '转录失败，请检查 WhisperX 服务', isProcessing: false, updatedAt: new Date() });
+        const errMsg = err instanceof Error ? err.message : '未知错误';
+        store.updateNote(id, { title: `转录失败: ${file.name}`, content: `转录出错: ${errMsg}`, summary: '转录失败，请重试', isProcessing: false, updatedAt: new Date() });
+        showProgress('error', `❌ 转录失败: ${errMsg.slice(0, 60)}`, runPipeline);
       }
-    })();
+    };
 
-    // Show toast for upload
-    setToast({ noteId: id, message: '音频已上传，AI 正在转录中...' });
-    setTimeout(() => setToast(null), 6000);
+    showProgress('uploading', '📤 音频已保存，正在上传...');
+    runPipeline();
   };
 
   const currentTemplate = AI_TEMPLATES[selectedTemplate];
@@ -543,6 +542,38 @@ export default function RecordPage() {
             </div>
           )}
         </div>
+
+        {/* Language Selector */}
+        <div className="relative">
+          <button
+            onClick={() => !isRecording && setShowLangMenu(!showLangMenu)}
+            disabled={isRecording}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
+              isRecording ? 'opacity-50 cursor-not-allowed' : 'hover:bg-white/5'
+            } text-[var(--color-text-tertiary)]`}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>语言: {languages.find(l => l.code === speechLang)?.flag} {languages.find(l => l.code === speechLang)?.label}</span>
+          </button>
+          {showLangMenu && !isRecording && (
+            <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-48 card p-2 z-50 shadow-xl">
+              {languages.map(lang => (
+                <button
+                  key={lang.code}
+                  onClick={() => { setSpeechLang(lang.code); setShowLangMenu(false); }}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2 transition-colors cursor-pointer ${
+                    speechLang === lang.code
+                      ? 'bg-[var(--color-primary)]/15 text-[var(--color-primary)]'
+                      : 'text-[var(--color-text-secondary)] hover:bg-white/5'
+                  }`}
+                >
+                  <span>{lang.flag}</span>
+                  <span>{lang.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Controls */}
@@ -612,16 +643,40 @@ export default function RecordPage() {
 
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-24 lg:bottom-8 left-1/2 -translate-x-1/2 z-50 animate-[slideUp_0.3s_ease-out]">
-          <div className="flex items-center gap-3 px-5 py-3 rounded-2xl bg-[var(--color-bg-card)] border border-white/10 shadow-2xl backdrop-blur-xl">
-            <CheckCircle2 className="w-5 h-5 text-[var(--color-success)] flex-shrink-0" />
+        <div className="fixed bottom-24 lg:bottom-8 left-1/2 -translate-x-1/2 z-50 animate-[slideUp_0.3s_ease-out] max-w-[90vw]">
+          <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl border shadow-2xl backdrop-blur-xl ${
+            toast.type === 'error'
+              ? 'bg-[var(--color-error)]/10 border-[var(--color-error)]/30'
+              : toast.type === 'processing'
+              ? 'bg-[var(--color-bg-card)] border-[var(--color-primary)]/20'
+              : 'bg-[var(--color-bg-card)] border-white/10'
+          }`}>
+            {toast.type === 'error' ? (
+              <AlertCircle className="w-5 h-5 text-[var(--color-error)] flex-shrink-0" />
+            ) : toast.type === 'processing' ? (
+              <Loader2 className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0 animate-spin" />
+            ) : (
+              <CheckCircle2 className="w-5 h-5 text-[var(--color-success)] flex-shrink-0" />
+            )}
             <span className="text-sm text-[var(--color-text-primary)]">{toast.message}</span>
-            <button
-              onClick={() => { router.push(`/library/${toast.noteId}`); setToast(null); }}
-              className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold text-[var(--color-primary)] bg-[var(--color-primary)]/10 hover:bg-[var(--color-primary)]/20 transition-colors cursor-pointer whitespace-nowrap"
-            >
-              查看笔记 <ExternalLink className="w-3 h-3" />
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {toast.onRetry && (
+                <button
+                  onClick={() => { toast.onRetry?.(); }}
+                  className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold text-[var(--color-tag-amber)] bg-[var(--color-tag-amber)]/10 hover:bg-[var(--color-tag-amber)]/20 transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  <RotateCcw className="w-3 h-3" /> 重试
+                </button>
+              )}
+              {(toast.type === 'success' || toast.type === 'error') && (
+                <button
+                  onClick={() => { router.push(`/library/${toast.noteId}`); setToast(null); }}
+                  className="flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold text-[var(--color-primary)] bg-[var(--color-primary)]/10 hover:bg-[var(--color-primary)]/20 transition-colors cursor-pointer whitespace-nowrap"
+                >
+                  查看笔记 <ExternalLink className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
