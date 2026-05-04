@@ -6,14 +6,12 @@ import { useAppStore } from '@/store/app-store';
 import { useAuthStore } from '@/store/auth-store';
 
 export default function SettingsPage() {
-  const { whisperxEndpoint, setWhisperxEndpoint, asrEngine, qwenAsrEndpoint, setQwenAsrEndpoint } = useAppStore();
+  const { whisperxEndpoint, setWhisperxEndpoint, asrEngineMap } = useAppStore();
   const { user } = useAuthStore();
   const isAdmin = user?.role === 'admin';
 
   const [sharedConfig, setSharedConfig] = useState<Record<string, string>>({});
   const [configLoading, setConfigLoading] = useState(true);
-  const [isTestingWx, setIsTestingWx] = useState(false);
-  const [wxTestResult, setWxTestResult] = useState<'success' | 'error' | null>(null);
 
   useEffect(() => {
     fetch('/api/config')
@@ -26,19 +24,6 @@ export default function SettingsPage() {
   }, []);
 
   const isProxyMode = whisperxEndpoint.startsWith('/');
-
-  const testWhisperX = async () => {
-    if (!whisperxEndpoint) { setWxTestResult('error'); return; }
-    setIsTestingWx(true);
-    setWxTestResult(null);
-    try {
-      const res = await fetch(whisperxEndpoint, { method: 'GET' });
-      const data = isProxyMode ? await res.json().catch(() => null) : null;
-      const ok = isProxyMode ? (data?.status === 'ok') : (res.ok || res.status === 404 || res.status === 405);
-      setWxTestResult(ok ? 'success' : 'error');
-    } catch { setWxTestResult('error'); }
-    finally { setIsTestingWx(false); }
-  };
 
   const inputClass = "w-full px-4 py-3 bg-[var(--color-bg-surface)] border border-white/8 rounded-xl text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-tertiary)] focus:outline-none focus:border-[var(--color-primary)]/40 transition-colors";
   const readOnlyClass = "w-full px-4 py-3 bg-[var(--color-bg-surface)] border border-white/6 rounded-xl text-sm text-[var(--color-text-secondary)] cursor-not-allowed";
@@ -57,60 +42,37 @@ export default function SettingsPage() {
           <h2 className="text-lg font-semibold">语音识别引擎</h2>
         </div>
 
-        {/* Active Engine Badge */}
-        <div className="flex items-center gap-3">
-          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${
-            asrEngine === 'qwen3'
-              ? 'bg-[var(--color-tag-indigo)]/15 text-[var(--color-tag-indigo)]'
-              : 'bg-[var(--color-tag-emerald)]/15 text-[var(--color-tag-emerald)]'
-          }`}>
-            {asrEngine === 'qwen3' ? '⚡ Qwen3-ASR-1.7B' : '🎯 WhisperX'}
-          </span>
-          <span className="text-xs text-[var(--color-text-tertiary)]">
-            {asrEngine === 'qwen3'
-              ? '52 语言 · 高精度 · 歌声识别'
-              : '说话人分离 · 词级时间戳 · 稳定可靠'}
-          </span>
+        {/* Per-mode engine mapping */}
+        <div className="space-y-1.5">
+          {[
+            { key: 'thoughts', label: '💡 灵感随记' },
+            { key: 'meeting', label: '🏢 会议记录' },
+            { key: 'lecture', label: '📖 课堂笔记' },
+            { key: 'interview', label: '🎤 访谈对话' },
+            { key: 'journal', label: '📔 日记随想' },
+          ].map(m => {
+            const engine = asrEngineMap[m.key] || 'qwen3';
+            return (
+              <div key={m.key} className="flex items-center gap-3">
+                <span className="text-sm w-24 flex-shrink-0">{m.label}</span>
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium ${
+                  engine === 'qwen3'
+                    ? 'bg-[var(--color-tag-indigo)]/15 text-[var(--color-tag-indigo)]'
+                    : 'bg-[var(--color-tag-emerald)]/15 text-[var(--color-tag-emerald)]'
+                }`}>
+                  {engine === 'qwen3' ? '⚡ Qwen3-ASR' : '🎯 WhisperX'}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
-        {isProxyMode && asrEngine === 'whisperx' && (
+        {isProxyMode && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-tag-emerald)]/10 text-xs text-[var(--color-tag-emerald)]">
             <Shield className="w-3.5 h-3.5" />
             <span>安全代理模式：音频通过 Cloudflare Tunnel 加密传输</span>
           </div>
         )}
-
-        <div>
-          <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-            <Server className="w-4 h-4" />
-            {asrEngine === 'qwen3' ? 'Qwen3-ASR 端点' : 'WhisperX 端点'}
-          </label>
-          <input
-            type="url"
-            value={asrEngine === 'qwen3' ? qwenAsrEndpoint : whisperxEndpoint}
-            onChange={(e) => asrEngine === 'qwen3' ? setQwenAsrEndpoint(e.target.value) : setWhisperxEndpoint(e.target.value)}
-            placeholder={asrEngine === 'qwen3' ? '/api/transcribe-qwen' : '/api/transcribe'}
-            className={inputClass}
-          />
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button
-            onClick={testWhisperX}
-            disabled={isTestingWx}
-            className="px-6 py-3 bg-[var(--color-tag-emerald)] text-black font-semibold rounded-xl hover:opacity-90 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isTestingWx ? (
-              <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />测试中...</span>
-            ) : '测试连接'}
-          </button>
-          {wxTestResult === 'success' && (
-            <span className="flex items-center gap-1.5 text-sm text-[var(--color-success)]"><Check className="w-4 h-4" />服务可用</span>
-          )}
-          {wxTestResult === 'error' && (
-            <span className="text-sm text-[var(--color-error)]">无法连接 ASR 服务</span>
-          )}
-        </div>
 
         <p className="text-xs text-[var(--color-text-tertiary)]">
           💡 切换引擎请前往「管理后台 → 配置」

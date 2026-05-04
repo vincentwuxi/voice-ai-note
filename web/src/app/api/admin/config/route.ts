@@ -31,7 +31,7 @@ export async function PUT(request: NextRequest) {
   const { env } = await getCloudflareContext();
   const body = await request.json() as Record<string, string>;
 
-  const allowedKeys = ['apiEndpoint', 'apiKey', 'selectedModel', 'whisperxEndpoint', 'asrEngine', 'qwenAsrEndpoint'];
+  const allowedKeys = ['apiEndpoint', 'apiKey', 'selectedModel', 'whisperxEndpoint', 'asrEngineMap', 'qwenAsrEndpoint'];
   const batch: ReturnType<typeof env.DB.prepare>[] = [];
 
   for (const [key, value] of Object.entries(body)) {

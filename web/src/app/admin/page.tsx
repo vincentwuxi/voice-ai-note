@@ -41,7 +41,7 @@ export default function AdminPage() {
     apiKey: '',
     selectedModel: 'gemini-2.5-flash',
     whisperxEndpoint: '/api/transcribe',
-    asrEngine: 'whisperx',
+    asrEngineMap: '{"thoughts":"qwen3","meeting":"whisperx","lecture":"qwen3","interview":"whisperx","journal":"qwen3"}',
     qwenAsrEndpoint: '/api/transcribe-qwen',
   });
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -299,22 +299,40 @@ export default function AdminPage() {
               </div>
 
               <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                  <Server className="w-4 h-4" /> ASR 语音识别引擎
+                <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-3">
+                  <Server className="w-4 h-4" /> ASR 语音识别引擎（按模式配置）
                 </label>
-                <select
-                  value={config.asrEngine}
-                  onChange={e => setConfig(c => ({ ...c, asrEngine: e.target.value }))}
-                  className={inputClass}
-                >
-                  <option value="whisperx">WhisperX — 说话人分离 + 词级时间戳</option>
-                  <option value="qwen3">Qwen3-ASR-1.7B — 52 语言 + 高精度</option>
-                </select>
-                <p className="text-[10px] text-[var(--color-text-tertiary)] mt-1.5">
-                  {config.asrEngine === 'qwen3'
-                    ? '⚡ Qwen3-ASR: 52 语言/方言、歌声识别、超低 WER (~4.9%)、语言自动检测'
-                    : '🎯 WhisperX: 多人会议说话人分离、精确时间戳对齐、成熟稳定'
-                  }
+                <div className="space-y-2">
+                  {(() => {
+                    const map = (() => { try { return JSON.parse(config.asrEngineMap); } catch { return { thoughts: 'qwen3', meeting: 'whisperx', lecture: 'qwen3', interview: 'whisperx', journal: 'qwen3' }; } })();
+                    const modes = [
+                      { key: 'thoughts', label: '💡 灵感随记', hint: '个人笔记' },
+                      { key: 'meeting', label: '🏢 会议记录', hint: '多人会话' },
+                      { key: 'lecture', label: '📖 课堂笔记', hint: '讲座/演讲' },
+                      { key: 'interview', label: '🎤 访谈对话', hint: '双人对话' },
+                      { key: 'journal', label: '📔 日记随想', hint: '个人独白' },
+                    ];
+                    return modes.map(m => (
+                      <div key={m.key} className="flex items-center gap-3">
+                        <span className="text-sm w-28 flex-shrink-0">{m.label}</span>
+                        <select
+                          value={map[m.key] || 'qwen3'}
+                          onChange={e => {
+                            const newMap = { ...map, [m.key]: e.target.value };
+                            setConfig(c => ({ ...c, asrEngineMap: JSON.stringify(newMap) }));
+                          }}
+                          className="flex-1 px-3 py-2 bg-[var(--color-bg-surface)] border border-white/8 rounded-lg text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)]/40 transition-colors"
+                        >
+                          <option value="whisperx">WhisperX（说话人分离）</option>
+                          <option value="qwen3">Qwen3-ASR（高精度）</option>
+                        </select>
+                        <span className="text-[10px] text-[var(--color-text-tertiary)] w-16 flex-shrink-0">{m.hint}</span>
+                      </div>
+                    ));
+                  })()}
+                </div>
+                <p className="text-[10px] text-[var(--color-text-tertiary)] mt-2">
+                  🎯 WhisperX 适合多人场景（说话人分离） · ⚡ Qwen3-ASR 适合单人场景（52 语言、WER ~4.9%）
                 </p>
               </div>
 

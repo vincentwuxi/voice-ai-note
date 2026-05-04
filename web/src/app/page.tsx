@@ -278,8 +278,9 @@ export default function RecordPage() {
           const { transcribeWithWhisperX, transcribeWithQwen3, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
           const { getSharedLLMConfig } = await import('@/services/shared-config');
 
-          // Choose ASR engine based on config
-          const wxResult = store.asrEngine === 'qwen3'
+          // Choose ASR engine based on recording mode
+          const engineForMode = store.asrEngineMap[mode] || 'qwen3';
+          const wxResult = engineForMode === 'qwen3'
             ? await transcribeWithQwen3(blob, store.qwenAsrEndpoint)
             : await transcribeWithWhisperX(blob, store.whisperxEndpoint, {
                 diarize: mode === 'meeting' || mode === 'interview',
@@ -411,8 +412,9 @@ export default function RecordPage() {
         const { transcribeWithWhisperX, transcribeWithQwen3, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
         const { getSharedLLMConfig } = await import('@/services/shared-config');
 
-        // Choose ASR engine based on config
-        const wxResult = store.asrEngine === 'qwen3'
+        // Choose ASR engine based on recording mode
+        const engineForMode = store.asrEngineMap[mode] || 'qwen3';
+        const wxResult = engineForMode === 'qwen3'
           ? await transcribeWithQwen3(file, store.qwenAsrEndpoint)
           : await transcribeWithWhisperX(file, store.whisperxEndpoint, {
               diarize: mode === 'meeting' || mode === 'interview',
