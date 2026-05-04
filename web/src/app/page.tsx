@@ -270,18 +270,20 @@ export default function RecordPage() {
       setToast({ noteId: id, message: '录音已保存，AI 正在处理中...' });
       setTimeout(() => setToast(null), 6000);
 
-      // Async: WhisperX transcription + LLM summarization
+      // Async: ASR transcription + LLM summarization
       (async () => {
         const store = useAppStore.getState();
-        const whisperxUrl = store.whisperxEndpoint;
 
         try {
-          const { transcribeWithWhisperX, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
+          const { transcribeWithWhisperX, transcribeWithQwen3, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
           const { getSharedLLMConfig } = await import('@/services/shared-config');
 
-          const wxResult = await transcribeWithWhisperX(blob, whisperxUrl, {
-            diarize: mode === 'meeting' || mode === 'interview',
-          });
+          // Choose ASR engine based on config
+          const wxResult = store.asrEngine === 'qwen3'
+            ? await transcribeWithQwen3(blob, store.qwenAsrEndpoint)
+            : await transcribeWithWhisperX(blob, store.whisperxEndpoint, {
+                diarize: mode === 'meeting' || mode === 'interview',
+              });
 
           const segments = wxResult.segments.map(s => ({
             start: s.start, end: s.end, text: s.text, speaker: s.speaker,
@@ -405,13 +407,16 @@ export default function RecordPage() {
     // Async transcription
     (async () => {
       const store = useAppStore.getState();
-      const whisperxUrl = store.whisperxEndpoint;
       try {
-        const { transcribeWithWhisperX, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
+        const { transcribeWithWhisperX, transcribeWithQwen3, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
         const { getSharedLLMConfig } = await import('@/services/shared-config');
-        const wxResult = await transcribeWithWhisperX(file, whisperxUrl, {
-          diarize: mode === 'meeting' || mode === 'interview',
-        });
+
+        // Choose ASR engine based on config
+        const wxResult = store.asrEngine === 'qwen3'
+          ? await transcribeWithQwen3(file, store.qwenAsrEndpoint)
+          : await transcribeWithWhisperX(file, store.whisperxEndpoint, {
+              diarize: mode === 'meeting' || mode === 'interview',
+            });
         const segments = wxResult.segments.map(s => ({
           start: s.start, end: s.end, text: s.text, speaker: s.speaker,
         }));

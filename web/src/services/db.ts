@@ -112,11 +112,15 @@ export async function getAudioBlob(id: string): Promise<Blob | null> {
 
 // ── Config ──
 
+export type AsrEngine = 'whisperx' | 'qwen3';
+
 export interface AppConfig {
   apiEndpoint: string;
   apiKey: string;
   selectedModel: string;
   whisperxEndpoint: string;
+  asrEngine: AsrEngine;
+  qwenAsrEndpoint: string;
   speakerNames: Record<string, Record<string, string>>; // noteId → { speakerKey: name }
 }
 
@@ -125,6 +129,8 @@ const DEFAULT_CONFIG: AppConfig = {
   apiKey: '',
   selectedModel: 'gemini-2.5-pro',
   whisperxEndpoint: '/api/transcribe',
+  asrEngine: 'whisperx',
+  qwenAsrEndpoint: '/api/transcribe-qwen',
   speakerNames: {},
 };
 

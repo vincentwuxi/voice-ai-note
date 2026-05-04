@@ -56,6 +56,53 @@ export async function transcribeWithWhisperX(
 }
 
 /**
+ * Call Qwen3-ASR-1.7B API for transcription
+ * Returns a WhisperXResponse-compatible result for seamless engine switching.
+ *
+ * Qwen3-ASR response format:
+ *   { "language": "Chinese", "text": "转录文本..." }
+ *
+ * The proxy at /api/transcribe-qwen normalizes it to WhisperXResponse format.
+ */
+export async function transcribeWithQwen3(
+  audioBlob: Blob,
+  endpoint: string,
+): Promise<WhisperXResponse> {
+  const formData = new FormData();
+  formData.append('file', audioBlob, 'recording.webm');
+
+  const isProxy = endpoint.startsWith('/');
+  const url = isProxy ? endpoint : `${endpoint}/asr`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Qwen3-ASR 转录失败 (${res.status}): ${text}`);
+  }
+
+  const data = await res.json();
+
+  // If the proxy already normalized to WhisperXResponse format, return directly
+  if (data.segments) return data;
+
+  // Raw Qwen3 response: { language: "Chinese", text: "..." }
+  // Normalize to WhisperXResponse format
+  return {
+    language: data.language || 'zh',
+    diarization: false,
+    segments: [{
+      start: 0,
+      end: 0,
+      text: data.text || '',
+    }],
+  };
+}
+
+/**
  * Call LLM API with template-based prompt
  */
 export async function summarizeWithLLM(

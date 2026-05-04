@@ -41,6 +41,8 @@ export default function AdminPage() {
     apiKey: '',
     selectedModel: 'gemini-2.5-flash',
     whisperxEndpoint: '/api/transcribe',
+    asrEngine: 'whisperx',
+    qwenAsrEndpoint: '/api/transcribe-qwen',
   });
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [configLoading, setConfigLoading] = useState(true);
@@ -298,6 +300,26 @@ export default function AdminPage() {
 
               <div>
                 <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  <Server className="w-4 h-4" /> ASR 语音识别引擎
+                </label>
+                <select
+                  value={config.asrEngine}
+                  onChange={e => setConfig(c => ({ ...c, asrEngine: e.target.value }))}
+                  className={inputClass}
+                >
+                  <option value="whisperx">WhisperX — 说话人分离 + 词级时间戳</option>
+                  <option value="qwen3">Qwen3-ASR-1.7B — 52 语言 + 高精度</option>
+                </select>
+                <p className="text-[10px] text-[var(--color-text-tertiary)] mt-1.5">
+                  {config.asrEngine === 'qwen3'
+                    ? '⚡ Qwen3-ASR: 52 语言/方言、歌声识别、超低 WER (~4.9%)、语言自动检测'
+                    : '🎯 WhisperX: 多人会议说话人分离、精确时间戳对齐、成熟稳定'
+                  }
+                </p>
+              </div>
+
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                   <Server className="w-4 h-4" /> WhisperX 端点
                 </label>
                 <input
@@ -307,6 +329,22 @@ export default function AdminPage() {
                   placeholder="/api/transcribe"
                   className={inputClass}
                 />
+              </div>
+
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                  <Server className="w-4 h-4" /> Qwen3-ASR 端点
+                </label>
+                <input
+                  type="text"
+                  value={config.qwenAsrEndpoint}
+                  onChange={e => setConfig(c => ({ ...c, qwenAsrEndpoint: e.target.value }))}
+                  placeholder="/api/transcribe-qwen"
+                  className={inputClass}
+                />
+                <p className="text-[10px] text-[var(--color-text-tertiary)] mt-1">
+                  代理模式: /api/transcribe-qwen · 直连: http://100.67.209.116:9946
+                </p>
               </div>
 
               <div className="flex items-center gap-4">

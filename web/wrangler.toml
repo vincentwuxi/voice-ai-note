@@ -12,9 +12,10 @@ routes = [
 directory = ".open-next/assets"
 binding = "ASSETS"
 
-# WhisperX Tunnel endpoint (public vars)
+# ASR endpoints (public vars)
 [vars]
 WHISPERX_ENDPOINT = "https://whisperx.aivolo.com"
+QWEN_ASR_ENDPOINT = "http://100.67.209.116:9946"
 
 # D1 Database
 [[d1_databases]]

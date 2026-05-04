@@ -1,7 +1,7 @@
 'use client';
 
 import { create } from 'zustand';
-import { saveNote, getAllNotes, deleteNoteById, saveConfig, loadConfig, saveAudioBlob } from '@/services/db';
+import { saveNote, getAllNotes, deleteNoteById, saveConfig, loadConfig, AsrEngine, saveAudioBlob } from '@/services/db';
 
 export type RecordingMode = 'thoughts' | 'meeting' | 'lecture' | 'interview' | 'journal';
 export type NoteTag = 'inspiration' | 'project' | 'personal' | 'reading' | 'design';
@@ -170,10 +170,14 @@ interface AppState {
   apiKey: string;
   selectedModel: string;
   whisperxEndpoint: string;
+  asrEngine: AsrEngine;
+  qwenAsrEndpoint: string;
   setApiEndpoint: (url: string) => void;
   setApiKey: (key: string) => void;
   setSelectedModel: (model: string) => void;
   setWhisperxEndpoint: (url: string) => void;
+  setAsrEngine: (engine: AsrEngine) => void;
+  setQwenAsrEndpoint: (url: string) => void;
   loadConfigFromDB: () => Promise<void>;
 
   // Filter
@@ -291,10 +295,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   apiKey: '',
   selectedModel: 'gemini-2.5-pro',
   whisperxEndpoint: '/api/transcribe',
+  asrEngine: 'whisperx',
+  qwenAsrEndpoint: '/api/transcribe-qwen',
   setApiEndpoint: (url) => { set({ apiEndpoint: url }); saveConfig({ apiEndpoint: url }).catch(console.error); },
   setApiKey: (key) => { set({ apiKey: key }); saveConfig({ apiKey: key }).catch(console.error); },
   setSelectedModel: (model) => { set({ selectedModel: model }); saveConfig({ selectedModel: model }).catch(console.error); },
   setWhisperxEndpoint: (url) => { set({ whisperxEndpoint: url }); saveConfig({ whisperxEndpoint: url }).catch(console.error); },
+  setAsrEngine: (engine) => { set({ asrEngine: engine }); saveConfig({ asrEngine: engine }).catch(console.error); },
+  setQwenAsrEndpoint: (url) => { set({ qwenAsrEndpoint: url }); saveConfig({ qwenAsrEndpoint: url }).catch(console.error); },
   loadConfigFromDB: async () => {
     try {
       const config = await loadConfig();
@@ -303,6 +311,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         apiKey: config.apiKey,
         selectedModel: config.selectedModel,
         whisperxEndpoint: config.whisperxEndpoint,
+        asrEngine: config.asrEngine || 'whisperx',
+        qwenAsrEndpoint: config.qwenAsrEndpoint || '/api/transcribe-qwen',
         speakerNames: config.speakerNames || {},
       });
     } catch { /* use defaults */ }

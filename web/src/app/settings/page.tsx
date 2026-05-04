@@ -6,7 +6,7 @@ import { useAppStore } from '@/store/app-store';
 import { useAuthStore } from '@/store/auth-store';
 
 export default function SettingsPage() {
-  const { whisperxEndpoint, setWhisperxEndpoint } = useAppStore();
+  const { whisperxEndpoint, setWhisperxEndpoint, asrEngine, qwenAsrEndpoint, setQwenAsrEndpoint } = useAppStore();
   const { user } = useAuthStore();
   const isAdmin = user?.role === 'admin';
 
@@ -50,32 +50,46 @@ export default function SettingsPage() {
         设置
       </h1>
 
-      {/* WhisperX Configuration */}
+      {/* ASR Configuration */}
       <div className="card p-6 space-y-6 mb-6">
         <div className="flex items-center gap-2">
           <AudioLines className="w-5 h-5 text-[var(--color-tag-emerald)]" />
-          <h2 className="text-lg font-semibold">WhisperX 语音识别</h2>
+          <h2 className="text-lg font-semibold">语音识别引擎</h2>
         </div>
-        <p className="text-sm text-[var(--color-text-tertiary)] -mt-3">
-          语音转写 + 说话人分离（支持多人会议）
-        </p>
-        {isProxyMode && (
+
+        {/* Active Engine Badge */}
+        <div className="flex items-center gap-3">
+          <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold ${
+            asrEngine === 'qwen3'
+              ? 'bg-[var(--color-tag-indigo)]/15 text-[var(--color-tag-indigo)]'
+              : 'bg-[var(--color-tag-emerald)]/15 text-[var(--color-tag-emerald)]'
+          }`}>
+            {asrEngine === 'qwen3' ? '⚡ Qwen3-ASR-1.7B' : '🎯 WhisperX'}
+          </span>
+          <span className="text-xs text-[var(--color-text-tertiary)]">
+            {asrEngine === 'qwen3'
+              ? '52 语言 · 高精度 · 歌声识别'
+              : '说话人分离 · 词级时间戳 · 稳定可靠'}
+          </span>
+        </div>
+
+        {isProxyMode && asrEngine === 'whisperx' && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-tag-emerald)]/10 text-xs text-[var(--color-tag-emerald)]">
             <Shield className="w-3.5 h-3.5" />
-            <span>安全代理模式：音频通过 Cloudflare Tunnel 加密传输，WhisperX 未暴露公网</span>
+            <span>安全代理模式：音频通过 Cloudflare Tunnel 加密传输</span>
           </div>
         )}
 
         <div>
           <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
             <Server className="w-4 h-4" />
-            WhisperX 端点
+            {asrEngine === 'qwen3' ? 'Qwen3-ASR 端点' : 'WhisperX 端点'}
           </label>
           <input
             type="url"
-            value={whisperxEndpoint}
-            onChange={(e) => setWhisperxEndpoint(e.target.value)}
-            placeholder="http://100.67.209.116:9100"
+            value={asrEngine === 'qwen3' ? qwenAsrEndpoint : whisperxEndpoint}
+            onChange={(e) => asrEngine === 'qwen3' ? setQwenAsrEndpoint(e.target.value) : setWhisperxEndpoint(e.target.value)}
+            placeholder={asrEngine === 'qwen3' ? '/api/transcribe-qwen' : '/api/transcribe'}
             className={inputClass}
           />
         </div>
@@ -91,12 +105,16 @@ export default function SettingsPage() {
             ) : '测试连接'}
           </button>
           {wxTestResult === 'success' && (
-            <span className="flex items-center gap-1.5 text-sm text-[var(--color-success)]"><Check className="w-4 h-4" />WhisperX 可用</span>
+            <span className="flex items-center gap-1.5 text-sm text-[var(--color-success)]"><Check className="w-4 h-4" />服务可用</span>
           )}
           {wxTestResult === 'error' && (
-            <span className="text-sm text-[var(--color-error)]">无法连接 WhisperX 服务</span>
+            <span className="text-sm text-[var(--color-error)]">无法连接 ASR 服务</span>
           )}
         </div>
+
+        <p className="text-xs text-[var(--color-text-tertiary)]">
+          💡 切换引擎请前往「管理后台 → 配置」
+        </p>
       </div>
 
       {/* Shared LLM Config (read-only for non-admin) */}
