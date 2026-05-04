@@ -57,6 +57,7 @@ export interface Note {
   updatedAt: Date;
   isProcessing: boolean;
   syncStatus?: SyncStatus;
+  completedTodos?: number[];
 }
 
 export const AI_TEMPLATES: Record<AITemplate, { label: string; icon: string; prompt: string }> = {

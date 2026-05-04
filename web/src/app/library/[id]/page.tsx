@@ -48,12 +48,13 @@ function getSpeakerIndex(speaker: string): number {
 }
 
 function SpeakerSegmentView({
-  segments, noteId, speakerNames, onSeek,
+  segments, noteId, speakerNames, onSeek, currentTime,
 }: {
   segments: TranscriptSegment[];
   noteId: string;
   speakerNames: Record<string, string>;
   onSeek: (time: number) => void;
+  currentTime: number;
 }) {
   const { setSpeakerName } = useAppStore();
   const [editingSpeaker, setEditingSpeaker] = useState<string | null>(null);
@@ -92,13 +93,18 @@ function SpeakerSegmentView({
         const defaultName = `说话人 ${idx + 1}`;
         const label = customName || defaultName;
         const startTime = group.segments[0].start;
+        const endTime = group.segments[group.segments.length - 1].end;
         const text = group.segments.map(s => s.text).join('');
+        const isActiveGroup = currentTime > 0 && currentTime >= startTime && currentTime < endTime;
 
         return (
           <div
             key={gi}
-            className="rounded-xl p-4 transition-all duration-200 hover:brightness-110 cursor-pointer"
-            style={{ backgroundColor: color.bg, borderLeft: `3px solid ${color.border}` }}
+            id={`seg-group-${gi}`}
+            className={`rounded-xl p-4 transition-all duration-300 cursor-pointer ${
+              isActiveGroup ? 'ring-1 ring-[var(--color-primary)]/50 brightness-125' : 'hover:brightness-110'
+            }`}
+            style={{ backgroundColor: color.bg, borderLeft: `3px solid ${isActiveGroup ? 'var(--color-primary)' : color.border}` }}
             onClick={() => onSeek(startTime)}
           >
             <div className="flex items-center gap-2 mb-2">
@@ -160,6 +166,7 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const [editKeyPoints, setEditKeyPoints] = useState<string[]>([]);
   const [editActionItems, setEditActionItems] = useState<string[]>([]);
   const [completedTodos, setCompletedTodos] = useState<Set<number>>(new Set());
+  const [todosInitialized, setTodosInitialized] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const { updateNote, deleteNote } = useAppStore();
@@ -222,6 +229,14 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
     audio.addEventListener('ended', onEnd);
     return () => { audio.removeEventListener('timeupdate', onTime); audio.removeEventListener('ended', onEnd); };
   }, []);
+
+  // P1-6: Initialize completedTodos from persisted note data
+  useEffect(() => {
+    if (note && !todosInitialized) {
+      setCompletedTodos(new Set(note.completedTodos || []));
+      setTodosInitialized(true);
+    }
+  }, [note, todosInitialized]);
 
   if (!note) {
     return (
@@ -595,6 +610,7 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
                           const next = new Set(completedTodos);
                           if (done) next.delete(i); else next.add(i);
                           setCompletedTodos(next);
+                          updateNote(id, { completedTodos: Array.from(next) });
                         }}
                         className={`flex items-center gap-2.5 text-sm cursor-pointer transition-all ${done ? 'text-[var(--color-text-tertiary)] line-through opacity-60' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
                       >
@@ -668,6 +684,7 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
                 noteId={id}
                 speakerNames={noteSpeakerNames}
                 onSeek={handleSeek}
+                currentTime={currentTime}
               />
             ) : (
               <div className="text-sm text-[var(--color-text-secondary)] leading-7 whitespace-pre-wrap">{note.content}</div>
