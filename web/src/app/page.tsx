@@ -51,7 +51,7 @@ export default function RecordPage() {
     addNote,
   } = useAppStore();
 
-  const [analyserData, setAnalyserData] = useState<number[]>(new Array(64).fill(0));
+
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [toast, setToast] = useState<{ noteId: string; message: string; type?: 'success' | 'error' | 'processing'; stage?: ProcessingStage; onRetry?: () => void } | null>(null);
@@ -62,6 +62,7 @@ export default function RecordPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const animFrameRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -200,12 +201,13 @@ export default function RecordPage() {
 
     try { recognition.start(); } catch { /* ignore */ }
     recognitionRef.current = recognition;
-  }, [setLiveTranscript]);
+  }, [setLiveTranscript, speechLang]);
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const audioCtx = new AudioContext();
+      audioCtxRef.current = audioCtx;
       const source = audioCtx.createMediaStreamSource(stream);
       const analyser = audioCtx.createAnalyser();
       analyser.fftSize = 256;
@@ -245,7 +247,8 @@ export default function RecordPage() {
       // Start live transcription
       startLiveTranscription();
     } catch {
-      alert('无法访问麦克风，请允许浏览器使用麦克风权限。');
+      setToast({ noteId: '', message: '🎤 无法访问麦克风，请在浏览器设置中允许使用麦克风权限', type: 'error', stage: 'error' });
+      setTimeout(() => setToast(null), 5000);
     }
   };
 
@@ -308,6 +311,8 @@ export default function RecordPage() {
       // P2-8: Clear draft
       if (draftIntervalRef.current) { clearInterval(draftIntervalRef.current); draftIntervalRef.current = null; }
       clearRecordingDraft().catch(() => {});
+      // Close AudioContext to prevent memory leak
+      if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
 
       // Show progress toast
       const showProgress = (stage: ProcessingStage, msg: string, retryFn?: () => void) => {
@@ -383,6 +388,8 @@ export default function RecordPage() {
     // P2-8: Clear draft
     if (draftIntervalRef.current) { clearInterval(draftIntervalRef.current); draftIntervalRef.current = null; }
     clearRecordingDraft().catch(() => {});
+    // Close AudioContext to prevent memory leak
+    if (audioCtxRef.current) { audioCtxRef.current.close().catch(() => {}); audioCtxRef.current = null; }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

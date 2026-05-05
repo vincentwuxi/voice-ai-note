@@ -74,9 +74,13 @@ body {
   border-color: rgba(0, 0, 0, 0.06);
 }
 
-/* Light theme: fix white/ opacity borders becoming invisible */
+/* Light theme: fix white/ opacity borders and backgrounds becoming invisible */
 [data-theme="light"] [class*="border-white/"] {
   border-color: rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] [class*="bg-white/"]:hover,
+[data-theme="light"] [class*="hover:bg-white/"] {
+  background-color: rgba(0, 0, 0, 0.04);
 }
 [data-theme="light"] ::-webkit-scrollbar-thumb {
   background: #D4D0C8;

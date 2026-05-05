@@ -169,6 +169,7 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const [todosInitialized, setTodosInitialized] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
+  const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
   const { updateNote, deleteNote } = useAppStore();
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -323,7 +324,8 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
       const { getSharedLLMConfig } = await import('@/services/shared-config');
       const llmConfig = await getSharedLLMConfig();
       if (!llmConfig.apiEndpoint || !llmConfig.apiKey) {
-        alert('请先在管理后台配置 LLM API 密钥');
+        setFeedbackMsg({ text: '⚙️ 请先在管理后台配置 LLM API 密钥', type: 'error' });
+        setTimeout(() => setFeedbackMsg(null), 4000);
         setIsResummarizing(false);
         return;
       }
@@ -338,7 +340,8 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
         updatedAt: new Date(),
       });
     } catch (err) {
-      alert(`重新摘要失败: ${err instanceof Error ? err.message : '未知错误'}`);
+      setFeedbackMsg({ text: `❌ 重新摘要失败: ${err instanceof Error ? err.message : '未知错误'}`, type: 'error' });
+      setTimeout(() => setFeedbackMsg(null), 5000);
     }
     setIsResummarizing(false);
   };
@@ -346,6 +349,17 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   return (
     <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-10">
       <audio ref={audioRef} preload="metadata" />
+
+      {/* Feedback Toast */}
+      {feedbackMsg && (
+        <div className={`fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl text-sm font-medium shadow-xl backdrop-blur-lg border animate-[slideUp_0.3s_ease-out] ${
+          feedbackMsg.type === 'error'
+            ? 'bg-[var(--color-error)]/15 border-[var(--color-error)]/30 text-[var(--color-error)]'
+            : 'bg-[var(--color-success)]/15 border-[var(--color-success)]/30 text-[var(--color-success)]'
+        }`}>
+          {feedbackMsg.text}
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
