@@ -24,11 +24,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Forward the FormData from the browser
-    const formData = await request.formData();
+    // Re-construct FormData to avoid multipart boundary issues in Workers runtime
+    const incomingForm = await request.formData();
+    const audioFile = incomingForm.get('audio_file') as File | null;
+    if (!audioFile) {
+      return NextResponse.json({ error: 'No audio_file in form data' }, { status: 400 });
+    }
 
     // Build query string from search params
-    const searchParams = request.nextUrl.searchParams.toString();
-    const url = `${endpoint}/transcribe${searchParams ? `?${searchParams}` : ''}`;
+    // The openai-whisper-asr-webservice uses /asr endpoint with output=json
+    const searchParams = new URLSearchParams(request.nextUrl.searchParams);
+    if (!searchParams.has('output')) searchParams.set('output', 'json');
+    const queryString = searchParams.toString();
+    const url = `${endpoint}/asr${queryString ? `?${queryString}` : ''}`;
 
     // Build headers — inject Service Token for Cloudflare Access
     const headers: Record<string, string> = {};
@@ -37,10 +45,14 @@ export async function POST(request: NextRequest) {
       headers['CF-Access-Client-Secret'] = clientSecret;
     }
 
+    // Re-create clean FormData with the audio blob
+    const outForm = new FormData();
+    outForm.append('audio_file', audioFile, audioFile.name || 'recording.webm');
+
     // Forward to WhisperX
     const res = await fetch(url, {
       method: 'POST',
-      body: formData,
+      body: outForm,
       headers,
     });
 
@@ -52,8 +64,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Normalize response: whisper-asr-webservice returns { language, segments, text }
+    // Our frontend expects { language, diarization, segments[{start, end, text, speaker?, words?}] }
     const data = await res.json();
-    return NextResponse.json(data);
+    const normalized = {
+      language: data.language || 'en',
+      diarization: false,
+      segments: (data.segments || []).map((s: Record<string, unknown>) => ({
+        start: s.start,
+        end: s.end,
+        text: s.text,
+        speaker: s.speaker,
+        words: s.words,
+      })),
+    };
+    return NextResponse.json(normalized);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Unknown proxy error';
     return NextResponse.json({ error: message }, { status: 502 });

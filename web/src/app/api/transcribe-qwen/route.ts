@@ -12,6 +12,8 @@ export async function POST(request: NextRequest) {
   try {
     const { env } = await getCloudflareContext();
     const endpoint = env.QWEN_ASR_ENDPOINT;
+    const clientId = env.CF_ACCESS_CLIENT_ID;
+    const clientSecret = env.CF_ACCESS_CLIENT_SECRET;
 
     if (!endpoint) {
       return NextResponse.json(
@@ -20,14 +22,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const formData = await request.formData();
+    const incomingForm = await request.formData();
+    const audioFile = incomingForm.get('file') as File | null;
+    if (!audioFile) {
+      return NextResponse.json({ error: 'No file in form data' }, { status: 400 });
+    }
 
-    // Qwen3-ASR expects a "file" field
+    // endpoint may be "https://whisperx.aivolo.com/qwen-asr" (tunnel) or "http://host:9946" (direct)
+    // Qwen3-ASR FastAPI expects POST /asr
     const url = `${endpoint}/asr`;
+
+    const headers: Record<string, string> = {};
+    if (clientId && clientSecret) {
+      headers['CF-Access-Client-Id'] = clientId;
+      headers['CF-Access-Client-Secret'] = clientSecret;
+    }
+
+    const outForm = new FormData();
+    outForm.append('file', audioFile, audioFile.name || 'recording.webm');
 
     const res = await fetch(url, {
       method: 'POST',
-      body: formData,
+      body: outForm,
+      headers,
     });
 
     if (!res.ok) {

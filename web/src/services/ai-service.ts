@@ -35,12 +35,14 @@ export async function transcribeWithWhisperX(
   if (options?.maxSpeakers) params.set('max_speakers', options.maxSpeakers.toString());
 
   const queryString = params.toString();
-  // Proxy mode: endpoint starts with "/" (e.g. "/api/transcribe") — server-side proxy
-  // Direct mode: endpoint is full URL (e.g. "http://localhost:9100") — local dev
+  // Proxy mode: endpoint starts with "/" (e.g. "/api/transcribe") — server-side proxy handles path
+  // Direct mode: endpoint is full URL (e.g. "http://localhost:9000") — calls /asr directly
   const isProxy = endpoint.startsWith('/');
+  if (!isProxy && !params.has('output')) params.set('output', 'json');
+  const finalQuery = params.toString();
   const url = isProxy
-    ? `${endpoint}${queryString ? `?${queryString}` : ''}`
-    : `${endpoint}/transcribe${queryString ? `?${queryString}` : ''}`;
+    ? `${endpoint}${finalQuery ? `?${finalQuery}` : ''}`
+    : `${endpoint}/asr${finalQuery ? `?${finalQuery}` : ''}`;
 
   const res = await fetch(url, {
     method: 'POST',

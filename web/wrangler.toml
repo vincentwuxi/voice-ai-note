@@ -15,7 +15,7 @@ binding = "ASSETS"
 # ASR endpoints (public vars)
 [vars]
 WHISPERX_ENDPOINT = "https://whisperx.aivolo.com"
-QWEN_ASR_ENDPOINT = "http://100.67.209.116:9946"
+QWEN_ASR_ENDPOINT = "https://qwen-asr.aivolo.com"
 
 # D1 Database
 [[d1_databases]]
