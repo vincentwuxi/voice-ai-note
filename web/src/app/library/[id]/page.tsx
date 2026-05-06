@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useCallback } from 'react';
-import { ArrowLeft, Play, Pause, Share2, Download, Square, CheckSquare, Pencil, Users, Mic, FileText, FileJson, Subtitles, Edit3, Check, X, Plus, Trash2, RefreshCw, Loader2 } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Share2, Download, Square, CheckSquare, Pencil, Users, Mic, FileText, FileJson, Subtitles, Edit3, Check, X, Plus, Trash2, RefreshCw, Loader2, RotateCcw } from 'lucide-react';
 import { useAppStore, NoteTag, TranscriptSegment, AI_TEMPLATES, AITemplate } from '@/store/app-store';
 import { getAudioBlob, exportToMarkdown, exportToSRT, exportToJSON } from '@/services/db';
 import { useRouter } from 'next/navigation';
@@ -170,6 +170,7 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
+  const [isRetranscribing, setIsRetranscribing] = useState(false);
   const { updateNote, deleteNote } = useAppStore();
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -344,6 +345,93 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
       setTimeout(() => setFeedbackMsg(null), 5000);
     }
     setIsResummarizing(false);
+  };
+
+  // ===== Re-transcribe: reload audio from storage and re-run ASR + LLM =====
+  const retranscribe = async (forceEngine?: 'whisperx' | 'qwen3') => {
+    if (!note) return;
+    setIsRetranscribing(true);
+    setFeedbackMsg({ text: '🎧 正在加载音频...', type: 'success' });
+
+    try {
+      // Step 1: Load audio blob from R2 or IndexedDB
+      let audioBlob: Blob | null = null;
+
+      // Try R2 first
+      try {
+        const r2Res = await fetch(`/api/audio/${id}`);
+        if (r2Res.ok) {
+          audioBlob = await r2Res.blob();
+        }
+      } catch { /* R2 unavailable */ }
+
+      // Fallback to IndexedDB
+      if (!audioBlob) {
+        audioBlob = await getAudioBlob(id);
+      }
+
+      if (!audioBlob || audioBlob.size === 0) {
+        setFeedbackMsg({ text: '❌ 找不到原始音频文件，无法重新转录', type: 'error' });
+        setTimeout(() => setFeedbackMsg(null), 5000);
+        setIsRetranscribing(false);
+        return;
+      }
+
+      // Step 2: Run ASR with fallback
+      setFeedbackMsg({ text: '🎧 正在转录音频...', type: 'success' });
+      const { transcribeWithWhisperX, transcribeWithQwen3, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
+      const store = useAppStore.getState();
+      const engine = forceEngine || store.asrEngineMap[note.mode] || 'qwen3';
+      const fallbackEngine = engine === 'whisperx' ? 'qwen3' : 'whisperx';
+
+      let wxResult;
+      try {
+        wxResult = engine === 'qwen3'
+          ? await transcribeWithQwen3(audioBlob, store.qwenAsrEndpoint)
+          : await transcribeWithWhisperX(audioBlob, store.whisperxEndpoint, {
+              diarize: note.mode === 'meeting' || note.mode === 'interview',
+            });
+      } catch (primaryErr) {
+        setFeedbackMsg({ text: `⚠️ ${engine} 失败，尝试 ${fallbackEngine}...`, type: 'error' });
+        try {
+          wxResult = fallbackEngine === 'qwen3'
+            ? await transcribeWithQwen3(audioBlob, store.qwenAsrEndpoint)
+            : await transcribeWithWhisperX(audioBlob, store.whisperxEndpoint, {
+                diarize: note.mode === 'meeting' || note.mode === 'interview',
+              });
+        } catch {
+          throw primaryErr;
+        }
+      }
+
+      const segments = wxResult.segments.map(s => ({ start: s.start, end: s.end, text: s.text, speaker: s.speaker }));
+      const speakers = new Set(segments.map(s => s.speaker).filter(Boolean));
+      const fullText = segmentsToTranscript(segments);
+      updateNote(id, { content: fullText, segments, speakerCount: speakers.size, language: wxResult.language });
+
+      // Step 3: LLM Summary
+      const { getSharedLLMConfig } = await import('@/services/shared-config');
+      const llmConfig = await getSharedLLMConfig();
+      if (llmConfig.apiEndpoint && llmConfig.apiKey) {
+        setFeedbackMsg({ text: '✨ AI 正在生成摘要...', type: 'success' });
+        try {
+          const aiResult = await summarizeWithLLM(fullText, (note.mode as AITemplate) || 'auto', llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel);
+          updateNote(id, { title: aiResult.title, summary: aiResult.summary, keyPoints: aiResult.keyPoints, actionItems: aiResult.actionItems, isProcessing: false, updatedAt: new Date() });
+        } catch {
+          updateNote(id, { title: segments[0]?.text?.slice(0, 30) || '语音笔记', summary: fullText.slice(0, 200), isProcessing: false, updatedAt: new Date() });
+        }
+      } else {
+        updateNote(id, { title: segments[0]?.text?.slice(0, 30) || '语音笔记', summary: fullText.slice(0, 200), isProcessing: false, updatedAt: new Date() });
+      }
+
+      setFeedbackMsg({ text: '✅ 重新转录完成', type: 'success' });
+      setTimeout(() => setFeedbackMsg(null), 4000);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : '未知错误';
+      setFeedbackMsg({ text: `❌ 转录失败: ${errMsg}`, type: 'error' });
+      setTimeout(() => setFeedbackMsg(null), 8000);
+    }
+    setIsRetranscribing(false);
   };
 
   return (
@@ -688,9 +776,20 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
                   <><Users className="w-4 h-4 text-[var(--color-tag-blue)]" /> 会议转录 · {note.speakerCount} 位参与者</>
                 ) : (<>📝 完整转录</>)}
               </h2>
-              {isMultiSpeaker && (
-                <span className="text-xs text-[var(--color-text-tertiary)]">点击段落跳转音频 · 点击名称重命名</span>
-              )}
+              <div className="flex items-center gap-2">
+                {isMultiSpeaker && (
+                  <span className="text-xs text-[var(--color-text-tertiary)]">点击段落跳转音频 · 点击名称重命名</span>
+                )}
+                <button
+                  onClick={() => retranscribe()}
+                  disabled={isRetranscribing}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium text-[var(--color-text-tertiary)] bg-[var(--color-bg-surface)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 transition-all cursor-pointer disabled:opacity-50"
+                  title="重新转录音频"
+                >
+                  {isRetranscribing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                  {isRetranscribing ? '转录中...' : '重新转录'}
+                </button>
+              </div>
             </div>
             {hasSegments && isMultiSpeaker ? (
               <SpeakerSegmentView

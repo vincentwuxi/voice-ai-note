@@ -327,14 +327,31 @@ export default function RecordPage() {
           const { transcribeWithWhisperX, transcribeWithQwen3, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
           const { getSharedLLMConfig } = await import('@/services/shared-config');
 
-          // Stage 1: ASR
+          // Stage 1: ASR (with automatic fallback)
           showProgress('transcribing', '🎧 正在转录音频...');
           const engineForMode = store.asrEngineMap[mode] || 'qwen3';
-          const wxResult = engineForMode === 'qwen3'
-            ? await transcribeWithQwen3(blob, store.qwenAsrEndpoint)
-            : await transcribeWithWhisperX(blob, store.whisperxEndpoint, {
-                diarize: mode === 'meeting' || mode === 'interview',
-              });
+          const fallbackEngine = engineForMode === 'whisperx' ? 'qwen3' : 'whisperx';
+          let wxResult;
+          try {
+            wxResult = engineForMode === 'qwen3'
+              ? await transcribeWithQwen3(blob, store.qwenAsrEndpoint)
+              : await transcribeWithWhisperX(blob, store.whisperxEndpoint, {
+                  diarize: mode === 'meeting' || mode === 'interview',
+                });
+          } catch (primaryErr) {
+            // Primary engine failed — try fallback
+            showProgress('transcribing', `⚠️ ${engineForMode} 失败，正在尝试 ${fallbackEngine}...`);
+            try {
+              wxResult = fallbackEngine === 'qwen3'
+                ? await transcribeWithQwen3(blob, store.qwenAsrEndpoint)
+                : await transcribeWithWhisperX(blob, store.whisperxEndpoint, {
+                    diarize: mode === 'meeting' || mode === 'interview',
+                  });
+            } catch {
+              // Both engines failed — throw original error for better diagnostics
+              throw primaryErr;
+            }
+          }
 
           const segments = wxResult.segments.map(s => ({
             start: s.start, end: s.end, text: s.text, speaker: s.speaker,
