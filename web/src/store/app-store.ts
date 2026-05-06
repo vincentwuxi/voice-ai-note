@@ -43,6 +43,8 @@ export interface Note {
   id: string;
   title: string;
   content: string;
+  translatedContent?: string;    // LLM-translated transcript (e.g. EN→ZH)
+  targetLanguage?: string;       // Translation target language code (e.g. 'zh')
   summary: string;
   keyPoints: string[];
   actionItems: string[];

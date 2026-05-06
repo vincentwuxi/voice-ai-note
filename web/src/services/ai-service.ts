@@ -183,3 +183,57 @@ export function segmentsToTranscript(segments: TranscriptSegment[]): string {
   }
   return result;
 }
+
+/**
+ * Translate transcript text using LLM API.
+ * Supports any language pair (e.g. EN→ZH, ZH→EN).
+ * Preserves speaker labels like 【说话人 1】.
+ */
+export async function translateTranscript(
+  text: string,
+  targetLang: string,
+  apiEndpoint: string,
+  apiKey: string,
+  model: string
+): Promise<string> {
+  const langNames: Record<string, string> = {
+    'zh': '中文', 'en': 'English', 'ja': '日本語',
+    'ko': '한국어', 'fr': 'Français', 'de': 'Deutsch',
+    'es': 'Español', 'it': 'Italiano', 'pt': 'Português',
+    'ru': 'Русский', 'ar': 'العربية',
+  };
+  const targetName = langNames[targetLang] || targetLang;
+
+  const res = await fetch(`${apiEndpoint}/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        {
+          role: 'system',
+          content: `你是专业翻译助手。请将以下转录内容准确翻译为${targetName}。
+规则：
+1. 保留所有说话人标签格式（如【说话人 1】、【说话人 2】等）不要翻译
+2. 保持段落结构和换行
+3. 翻译要自然流畅、符合目标语言习惯
+4. 专业术语保留原文在括号中标注
+5. 只输出翻译结果，不要添加任何额外说明`,
+        },
+        { role: 'user', content: text },
+      ],
+      temperature: 0.2,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`翻译失败 (${res.status})`);
+  }
+
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || '';
+}
+

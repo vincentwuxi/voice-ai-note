@@ -67,16 +67,18 @@ export async function POST(request: NextRequest) {
     // Normalize response: whisper-asr-webservice returns { language, segments, text }
     // Our frontend expects { language, diarization, segments[{start, end, text, speaker?, words?}] }
     const data = await res.json();
+    const segments = (data.segments || []).map((s: Record<string, unknown>) => ({
+      start: s.start,
+      end: s.end,
+      text: s.text,
+      speaker: s.speaker,
+      words: s.words,
+    }));
+    const hasSpeakers = segments.some((s: Record<string, unknown>) => s.speaker);
     const normalized = {
       language: data.language || 'en',
-      diarization: false,
-      segments: (data.segments || []).map((s: Record<string, unknown>) => ({
-        start: s.start,
-        end: s.end,
-        text: s.text,
-        speaker: s.speaker,
-        words: s.words,
-      })),
+      diarization: hasSpeakers,
+      segments,
     };
     return NextResponse.json(normalized);
   } catch (err) {

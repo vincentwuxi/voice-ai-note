@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useCallback } from 'react';
-import { ArrowLeft, Play, Pause, Share2, Download, Square, CheckSquare, Pencil, Users, Mic, FileText, FileJson, Subtitles, Edit3, Check, X, Plus, Trash2, RefreshCw, Loader2, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Play, Pause, Share2, Download, Square, CheckSquare, Pencil, Users, Mic, FileText, FileJson, Subtitles, Edit3, Check, X, Plus, Trash2, RefreshCw, Loader2, RotateCcw, Languages } from 'lucide-react';
 import { useAppStore, NoteTag, TranscriptSegment, AI_TEMPLATES, AITemplate } from '@/store/app-store';
 import { getAudioBlob, exportToMarkdown, exportToSRT, exportToJSON } from '@/services/db';
 import { useRouter } from 'next/navigation';
@@ -171,6 +171,8 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const [isSharing, setIsSharing] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
   const [isRetranscribing, setIsRetranscribing] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [showTranslated, setShowTranslated] = useState(false);
   const { updateNote, deleteNote } = useAppStore();
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -775,11 +777,52 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
                 {isMultiSpeaker ? (
                   <><Users className="w-4 h-4 text-[var(--color-tag-blue)]" /> 会议转录 · {note.speakerCount} 位参与者</>
                 ) : (<>📝 完整转录</>)}
+                {note.language && (
+                  <span className="text-[10px] font-normal px-1.5 py-0.5 rounded-md bg-[var(--color-bg-surface)] text-[var(--color-text-tertiary)] uppercase">{note.language}</span>
+                )}
               </h2>
               <div className="flex items-center gap-2">
                 {isMultiSpeaker && (
-                  <span className="text-xs text-[var(--color-text-tertiary)]">点击段落跳转音频 · 点击名称重命名</span>
+                  <span className="text-xs text-[var(--color-text-tertiary)] hidden lg:inline">点击段落跳转音频 · 点击名称重命名</span>
                 )}
+                {/* Translate button */}
+                <button
+                  onClick={async () => {
+                    if (note.translatedContent) {
+                      setShowTranslated(!showTranslated);
+                      return;
+                    }
+                    setIsTranslating(true);
+                    setFeedbackMsg({ text: '🌐 正在翻译转录内容...', type: 'success' });
+                    try {
+                      const { translateTranscript } = await import('@/services/ai-service');
+                      const { getSharedLLMConfig } = await import('@/services/shared-config');
+                      const llmConfig = await getSharedLLMConfig();
+                      if (!llmConfig.apiEndpoint || !llmConfig.apiKey) {
+                        throw new Error('请先在设置中配置 LLM API');
+                      }
+                      const targetLang = (note.language || '').startsWith('zh') ? 'en' : 'zh';
+                      const translated = await translateTranscript(
+                        note.content, targetLang,
+                        llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel
+                      );
+                      updateNote(id, { translatedContent: translated, targetLanguage: targetLang });
+                      setShowTranslated(true);
+                      setFeedbackMsg({ text: '✅ 翻译完成', type: 'success' });
+                      setTimeout(() => setFeedbackMsg(null), 3000);
+                    } catch (err) {
+                      setFeedbackMsg({ text: `❌ 翻译失败: ${err instanceof Error ? err.message : '未知错误'}`, type: 'error' });
+                      setTimeout(() => setFeedbackMsg(null), 5000);
+                    }
+                    setIsTranslating(false);
+                  }}
+                  disabled={isTranslating}
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium text-[var(--color-text-tertiary)] bg-[var(--color-bg-surface)] hover:text-[var(--color-tag-blue)] hover:bg-[var(--color-tag-blue)]/10 transition-all cursor-pointer disabled:opacity-50"
+                  title={note.translatedContent ? (showTranslated ? '查看原文' : '查看翻译') : '翻译全文'}
+                >
+                  {isTranslating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Languages className="w-3 h-3" />}
+                  {isTranslating ? '翻译中...' : note.translatedContent ? (showTranslated ? '原文' : '译文') : '翻译'}
+                </button>
                 <button
                   onClick={() => retranscribe()}
                   disabled={isRetranscribing}
@@ -791,7 +834,14 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
                 </button>
               </div>
             </div>
-            {hasSegments && isMultiSpeaker ? (
+            {/* Language toggle indicator */}
+            {showTranslated && note.translatedContent && (
+              <div className="flex items-center gap-2 mb-3 px-3 py-1.5 rounded-lg bg-[var(--color-tag-blue)]/10 border border-[var(--color-tag-blue)]/20">
+                <Languages className="w-3.5 h-3.5 text-[var(--color-tag-blue)]" />
+                <span className="text-xs text-[var(--color-tag-blue)]">已翻译为{note.targetLanguage === 'zh' ? '中文' : note.targetLanguage === 'en' ? 'English' : note.targetLanguage}</span>
+              </div>
+            )}
+            {hasSegments && isMultiSpeaker && !showTranslated ? (
               <SpeakerSegmentView
                 segments={note.segments}
                 noteId={id}
@@ -800,7 +850,9 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
                 currentTime={currentTime}
               />
             ) : (
-              <div className="text-sm text-[var(--color-text-secondary)] leading-7 whitespace-pre-wrap">{note.content}</div>
+              <div className="text-sm text-[var(--color-text-secondary)] leading-7 whitespace-pre-wrap">
+                {showTranslated && note.translatedContent ? note.translatedContent : note.content}
+              </div>
             )}
           </div>
         </div>
