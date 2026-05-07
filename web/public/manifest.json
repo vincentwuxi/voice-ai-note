@@ -2,7 +2,9 @@
   "name": "灵思 VoiceMind",
   "short_name": "VoiceMind",
   "description": "AI 驱动的语音笔记应用，录音自动转录、智能摘要、知识沉淀",
+  "id": "/",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0D0D0E",
   "theme_color": "#F5A623",
@@ -21,5 +23,7 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
 }

@@ -1,14 +1,23 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Sidebar, MobileNav } from "@/components/navigation";
 import DBInitializer from "@/components/db-initializer";
 import AuthGuard from "@/components/auth-guard";
+import ServiceWorkerRegistrar from "@/components/sw-registrar";
+
+export const viewport: Viewport = {
+  themeColor: "#0D0D0E",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   title: "灵思 VoiceMind — 用声音捕捉灵感",
   description: "AI 驱动的语音笔记应用，录音自动转录、智能摘要、知识沉淀",
   manifest: "/manifest.json",
-  themeColor: "#0D0D0E",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -35,9 +44,9 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
       </head>
       <body>
+        <ServiceWorkerRegistrar />
         <AuthGuard>
           <DBInitializer />
           <div className="flex min-h-screen">
@@ -52,3 +61,4 @@ export default function RootLayout({
     </html>
   );
 }
+
