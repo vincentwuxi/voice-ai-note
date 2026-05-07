@@ -173,6 +173,7 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const [isRetranscribing, setIsRetranscribing] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [showTranslated, setShowTranslated] = useState(false);
+  const [showTranslateMenu, setShowTranslateMenu] = useState(false);
   const { updateNote, deleteNote } = useAppStore();
   const audioRef = useRef<HTMLAudioElement>(null);
 
@@ -785,56 +786,96 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
                 {isMultiSpeaker && (
                   <span className="text-xs text-[var(--color-text-tertiary)] hidden lg:inline">点击段落跳转音频 · 点击名称重命名</span>
                 )}
-                {/* Translate button */}
-                <button
-                  onClick={async () => {
-                    if (note.translatedContent || note.translatedSegments) {
-                      setShowTranslated(!showTranslated);
-                      return;
-                    }
-                    setIsTranslating(true);
-                    setFeedbackMsg({ text: '🌐 正在翻译转录内容...', type: 'success' });
-                    try {
-                      const { translateTranscript, translateSegments } = await import('@/services/ai-service');
-                      const { getSharedLLMConfig } = await import('@/services/shared-config');
-                      const llmConfig = await getSharedLLMConfig();
-                      if (!llmConfig.apiEndpoint || !llmConfig.apiKey) {
-                        throw new Error('请先在设置中配置 LLM API');
-                      }
-                      const targetLang = (note.language || '').startsWith('zh') ? 'en' : 'zh';
-
-                      // Use segment-level translation for multi-speaker notes to preserve speaker view
-                      if (isMultiSpeaker && hasSegments) {
-                        const translatedSegs = await translateSegments(
-                          note.segments, targetLang,
-                          llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel
-                        );
-                        const { segmentsToTranscript } = await import('@/services/ai-service');
-                        const translatedText = segmentsToTranscript(translatedSegs);
-                        updateNote(id, { translatedSegments: translatedSegs, translatedContent: translatedText, targetLanguage: targetLang });
-                      } else {
-                        const translated = await translateTranscript(
-                          note.content, targetLang,
-                          llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel
-                        );
-                        updateNote(id, { translatedContent: translated, targetLanguage: targetLang });
-                      }
-                      setShowTranslated(true);
-                      setFeedbackMsg({ text: '✅ 翻译完成', type: 'success' });
-                      setTimeout(() => setFeedbackMsg(null), 3000);
-                    } catch (err) {
-                      setFeedbackMsg({ text: `❌ 翻译失败: ${err instanceof Error ? err.message : '未知错误'}`, type: 'error' });
-                      setTimeout(() => setFeedbackMsg(null), 5000);
-                    }
-                    setIsTranslating(false);
-                  }}
-                  disabled={isTranslating}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium text-[var(--color-text-tertiary)] bg-[var(--color-bg-surface)] hover:text-[var(--color-tag-blue)] hover:bg-[var(--color-tag-blue)]/10 transition-all cursor-pointer disabled:opacity-50"
-                  title={(note.translatedContent || note.translatedSegments) ? (showTranslated ? '查看原文' : '查看翻译') : '翻译全文'}
-                >
-                  {isTranslating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Languages className="w-3 h-3" />}
-                  {isTranslating ? '翻译中...' : (note.translatedContent || note.translatedSegments) ? (showTranslated ? '原文' : '译文') : '翻译'}
-                </button>
+                {/* Translate button + language selector */}
+                <div className="relative">
+                  <div className="flex items-center">
+                    <button
+                      onClick={() => {
+                        if (note.translatedContent || note.translatedSegments) {
+                          setShowTranslated(!showTranslated);
+                        } else {
+                          setShowTranslateMenu(!showTranslateMenu);
+                        }
+                      }}
+                      disabled={isTranslating}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-l-lg text-[10px] font-medium text-[var(--color-text-tertiary)] bg-[var(--color-bg-surface)] hover:text-[var(--color-tag-blue)] hover:bg-[var(--color-tag-blue)]/10 transition-all cursor-pointer disabled:opacity-50"
+                      title={(note.translatedContent || note.translatedSegments) ? (showTranslated ? '查看原文' : '查看翻译') : '选择翻译语言'}
+                    >
+                      {isTranslating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Languages className="w-3 h-3" />}
+                      {isTranslating ? '翻译中...' : (note.translatedContent || note.translatedSegments) ? (showTranslated ? '原文' : '译文') : '翻译'}
+                    </button>
+                    <button
+                      onClick={() => setShowTranslateMenu(!showTranslateMenu)}
+                      disabled={isTranslating}
+                      className="flex items-center px-1 py-1 rounded-r-lg text-[10px] font-medium text-[var(--color-text-tertiary)] bg-[var(--color-bg-surface)] hover:text-[var(--color-tag-blue)] hover:bg-[var(--color-tag-blue)]/10 transition-all cursor-pointer disabled:opacity-50 border-l border-white/10"
+                      title="选择翻译语言"
+                    >
+                      <svg className="w-2.5 h-2.5" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                  </div>
+                  {/* Language dropdown */}
+                  {showTranslateMenu && (
+                    <div className="absolute right-0 top-full mt-1 z-50 w-36 py-1 rounded-xl bg-[var(--color-bg-card)] border border-white/10 shadow-2xl backdrop-blur-xl">
+                      {[
+                        { code: 'zh', label: '🇨🇳 中文' },
+                        { code: 'en', label: '🇺🇸 English' },
+                        { code: 'ja', label: '🇯🇵 日本語' },
+                        { code: 'ko', label: '🇰🇷 한국어' },
+                        { code: 'fr', label: '🇫🇷 Français' },
+                        { code: 'de', label: '🇩🇪 Deutsch' },
+                        { code: 'es', label: '🇪🇸 Español' },
+                        { code: 'it', label: '🇮🇹 Italiano' },
+                        { code: 'pt', label: '🇧🇷 Português' },
+                        { code: 'ru', label: '🇷🇺 Русский' },
+                        { code: 'ar', label: '🇸🇦 العربية' },
+                      ].map(lang => (
+                        <button
+                          key={lang.code}
+                          onClick={async () => {
+                            setShowTranslateMenu(false);
+                            setIsTranslating(true);
+                            setFeedbackMsg({ text: `🌐 正在翻译为 ${lang.label.slice(4)}...`, type: 'success' });
+                            try {
+                              const { translateTranscript, translateSegments } = await import('@/services/ai-service');
+                              const { getSharedLLMConfig } = await import('@/services/shared-config');
+                              const llmConfig = await getSharedLLMConfig();
+                              if (!llmConfig.apiEndpoint || !llmConfig.apiKey) {
+                                throw new Error('请先在设置中配置 LLM API');
+                              }
+                              if (isMultiSpeaker && hasSegments) {
+                                const translatedSegs = await translateSegments(
+                                  note.segments, lang.code,
+                                  llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel
+                                );
+                                const { segmentsToTranscript } = await import('@/services/ai-service');
+                                const translatedText = segmentsToTranscript(translatedSegs);
+                                updateNote(id, { translatedSegments: translatedSegs, translatedContent: translatedText, targetLanguage: lang.code });
+                              } else {
+                                const translated = await translateTranscript(
+                                  note.content, lang.code,
+                                  llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel
+                                );
+                                updateNote(id, { translatedContent: translated, targetLanguage: lang.code });
+                              }
+                              setShowTranslated(true);
+                              setFeedbackMsg({ text: '✅ 翻译完成', type: 'success' });
+                              setTimeout(() => setFeedbackMsg(null), 3000);
+                            } catch (err) {
+                              setFeedbackMsg({ text: `❌ 翻译失败: ${err instanceof Error ? err.message : '未知错误'}`, type: 'error' });
+                              setTimeout(() => setFeedbackMsg(null), 5000);
+                            }
+                            setIsTranslating(false);
+                          }}
+                          className={`w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer hover:bg-[var(--color-tag-blue)]/10 ${
+                            note.targetLanguage === lang.code ? 'text-[var(--color-tag-blue)] font-medium' : 'text-[var(--color-text-secondary)]'
+                          }`}
+                        >
+                          {lang.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={() => retranscribe()}
                   disabled={isRetranscribing}
