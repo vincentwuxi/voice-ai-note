@@ -156,12 +156,19 @@ export default function RecordPage() {
   }, [isRecording]);
 
   // Web Speech API for live transcription
+  const speechErrorCountRef = useRef(0);
+  const [speechStatus, setSpeechStatus] = useState<'idle' | 'active' | 'error' | 'unsupported'>('idle');
+
   const startLiveTranscription = useCallback(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const W = window as any;
     const SpeechRecognitionCtor = W.SpeechRecognition || W.webkitSpeechRecognition;
-    if (!SpeechRecognitionCtor) return;
+    if (!SpeechRecognitionCtor) {
+      setSpeechStatus('unsupported');
+      return;
+    }
 
+    speechErrorCountRef.current = 0;
     const recognition = new SpeechRecognitionCtor();
     recognition.continuous = true;
     recognition.interimResults = true;
@@ -171,6 +178,8 @@ export default function RecordPage() {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recognition.onresult = (event: any) => {
+      speechErrorCountRef.current = 0; // Reset error count on successful result
+      setSpeechStatus('active');
       let interim = '';
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const transcript = event.results[i][0].transcript;
@@ -184,22 +193,43 @@ export default function RecordPage() {
     };
 
     recognition.onend = () => {
-      // Restart if still recording
-      if (useAppStore.getState().isRecording && !useAppStore.getState().isPaused) {
+      // Restart if still recording and not too many errors
+      if (useAppStore.getState().isRecording && !useAppStore.getState().isPaused && speechErrorCountRef.current < 5) {
         try { recognition.start(); } catch { /* ignore */ }
       }
     };
 
-    recognition.onerror = () => {
-      // Some errors are non-fatal
-      if (useAppStore.getState().isRecording && !useAppStore.getState().isPaused) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onerror = (event: any) => {
+      const errorType = event?.error || 'unknown';
+      console.warn('[Speech API] Error:', errorType);
+      speechErrorCountRef.current++;
+
+      // Fatal errors — don't retry
+      if (errorType === 'not-allowed') {
+        setSpeechStatus('error');
+        console.error('[Speech API] Microphone permission denied for speech recognition');
+        return;
+      }
+      if (errorType === 'network') {
+        setSpeechStatus('error');
+        console.error('[Speech API] Network error — Google Speech servers may be unreachable');
+        return;
+      }
+
+      // Non-fatal (no-speech, aborted) — retry with backoff, up to 5 times
+      if (useAppStore.getState().isRecording && !useAppStore.getState().isPaused && speechErrorCountRef.current < 5) {
+        const delay = Math.min(500 * speechErrorCountRef.current, 3000);
         setTimeout(() => {
           try { recognition.start(); } catch { /* ignore */ }
-        }, 500);
+        }, delay);
+      } else if (speechErrorCountRef.current >= 5) {
+        setSpeechStatus('error');
+        console.error('[Speech API] Too many errors, giving up on live transcription');
       }
     };
 
-    try { recognition.start(); } catch { /* ignore */ }
+    try { recognition.start(); setSpeechStatus('active'); } catch { setSpeechStatus('error'); }
     recognitionRef.current = recognition;
   }, [setLiveTranscript, speechLang]);
 
@@ -307,6 +337,7 @@ export default function RecordPage() {
       setIsPaused(false);
       cancelAnimationFrame(animFrameRef.current);
       setLiveTranscript('');
+      setSpeechStatus('idle');
 
       // P2-8: Clear draft
       if (draftIntervalRef.current) { clearInterval(draftIntervalRef.current); draftIntervalRef.current = null; }
@@ -616,21 +647,41 @@ export default function RecordPage() {
         />
       </div>
 
-      {/* Live Transcript */}
-      {isRecording && liveTranscript && (
+      {/* Live Transcript + Speech Status */}
+      {isRecording && (liveTranscript || speechStatus === 'error' || speechStatus === 'unsupported') && (
         <div className="w-full max-w-2xl mb-6">
           <div className="card p-4 max-h-32 overflow-y-auto">
             <div className="flex items-center gap-2 mb-2">
-              <span className="w-2 h-2 rounded-full bg-[var(--color-error)] animate-pulse" />
-              <span className="text-xs text-[var(--color-text-tertiary)]">实时转录</span>
+              {speechStatus === 'error' ? (
+                <>
+                  <AlertCircle className="w-3 h-3 text-[var(--color-error)]" />
+                  <span className="text-xs text-[var(--color-error)]">实时字幕不可用（网络或权限问题）</span>
+                </>
+              ) : speechStatus === 'unsupported' ? (
+                <>
+                  <AlertCircle className="w-3 h-3 text-[var(--color-text-tertiary)]" />
+                  <span className="text-xs text-[var(--color-text-tertiary)]">此浏览器不支持实时字幕</span>
+                </>
+              ) : (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-[var(--color-error)] animate-pulse" />
+                  <span className="text-xs text-[var(--color-text-tertiary)]">实时转录</span>
+                </>
+              )}
             </div>
-            <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
-              {liveTranscript.split('\u200B').map((part, i) => (
-                i === liveTranscript.split('\u200B').length - 1 && liveTranscript.includes('\u200B')
-                  ? <span key={i} className="text-[var(--color-primary)] opacity-60">{part}</span>
-                  : <span key={i}>{part}</span>
-              ))}
-            </p>
+            {liveTranscript ? (
+              <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">
+                {liveTranscript.split('\u200B').map((part, i) => (
+                  i === liveTranscript.split('\u200B').length - 1 && liveTranscript.includes('\u200B')
+                    ? <span key={i} className="text-[var(--color-primary)] opacity-60">{part}</span>
+                    : <span key={i}>{part}</span>
+                ))}
+              </p>
+            ) : (speechStatus === 'error' || speechStatus === 'unsupported') ? (
+              <p className="text-xs text-[var(--color-text-tertiary)]">
+                录音将正常保存，停止后会自动使用 ASR 引擎进行精确转录
+              </p>
+            ) : null}
           </div>
         </div>
       )}
