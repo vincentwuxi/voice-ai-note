@@ -788,25 +788,37 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
                 {/* Translate button */}
                 <button
                   onClick={async () => {
-                    if (note.translatedContent) {
+                    if (note.translatedContent || note.translatedSegments) {
                       setShowTranslated(!showTranslated);
                       return;
                     }
                     setIsTranslating(true);
                     setFeedbackMsg({ text: '🌐 正在翻译转录内容...', type: 'success' });
                     try {
-                      const { translateTranscript } = await import('@/services/ai-service');
+                      const { translateTranscript, translateSegments } = await import('@/services/ai-service');
                       const { getSharedLLMConfig } = await import('@/services/shared-config');
                       const llmConfig = await getSharedLLMConfig();
                       if (!llmConfig.apiEndpoint || !llmConfig.apiKey) {
                         throw new Error('请先在设置中配置 LLM API');
                       }
                       const targetLang = (note.language || '').startsWith('zh') ? 'en' : 'zh';
-                      const translated = await translateTranscript(
-                        note.content, targetLang,
-                        llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel
-                      );
-                      updateNote(id, { translatedContent: translated, targetLanguage: targetLang });
+
+                      // Use segment-level translation for multi-speaker notes to preserve speaker view
+                      if (isMultiSpeaker && hasSegments) {
+                        const translatedSegs = await translateSegments(
+                          note.segments, targetLang,
+                          llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel
+                        );
+                        const { segmentsToTranscript } = await import('@/services/ai-service');
+                        const translatedText = segmentsToTranscript(translatedSegs);
+                        updateNote(id, { translatedSegments: translatedSegs, translatedContent: translatedText, targetLanguage: targetLang });
+                      } else {
+                        const translated = await translateTranscript(
+                          note.content, targetLang,
+                          llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel
+                        );
+                        updateNote(id, { translatedContent: translated, targetLanguage: targetLang });
+                      }
                       setShowTranslated(true);
                       setFeedbackMsg({ text: '✅ 翻译完成', type: 'success' });
                       setTimeout(() => setFeedbackMsg(null), 3000);
@@ -818,10 +830,10 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
                   }}
                   disabled={isTranslating}
                   className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium text-[var(--color-text-tertiary)] bg-[var(--color-bg-surface)] hover:text-[var(--color-tag-blue)] hover:bg-[var(--color-tag-blue)]/10 transition-all cursor-pointer disabled:opacity-50"
-                  title={note.translatedContent ? (showTranslated ? '查看原文' : '查看翻译') : '翻译全文'}
+                  title={(note.translatedContent || note.translatedSegments) ? (showTranslated ? '查看原文' : '查看翻译') : '翻译全文'}
                 >
                   {isTranslating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Languages className="w-3 h-3" />}
-                  {isTranslating ? '翻译中...' : note.translatedContent ? (showTranslated ? '原文' : '译文') : '翻译'}
+                  {isTranslating ? '翻译中...' : (note.translatedContent || note.translatedSegments) ? (showTranslated ? '原文' : '译文') : '翻译'}
                 </button>
                 <button
                   onClick={() => retranscribe()}
@@ -835,20 +847,30 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
               </div>
             </div>
             {/* Language toggle indicator */}
-            {showTranslated && note.translatedContent && (
+            {showTranslated && (note.translatedContent || note.translatedSegments) && (
               <div className="flex items-center gap-2 mb-3 px-3 py-1.5 rounded-lg bg-[var(--color-tag-blue)]/10 border border-[var(--color-tag-blue)]/20">
                 <Languages className="w-3.5 h-3.5 text-[var(--color-tag-blue)]" />
                 <span className="text-xs text-[var(--color-tag-blue)]">已翻译为{note.targetLanguage === 'zh' ? '中文' : note.targetLanguage === 'en' ? 'English' : note.targetLanguage}</span>
               </div>
             )}
-            {hasSegments && isMultiSpeaker && !showTranslated ? (
-              <SpeakerSegmentView
-                segments={note.segments}
-                noteId={id}
-                speakerNames={noteSpeakerNames}
-                onSeek={handleSeek}
-                currentTime={currentTime}
-              />
+            {hasSegments && isMultiSpeaker ? (
+              showTranslated && note.translatedSegments ? (
+                <SpeakerSegmentView
+                  segments={note.translatedSegments}
+                  noteId={id}
+                  speakerNames={noteSpeakerNames}
+                  onSeek={handleSeek}
+                  currentTime={currentTime}
+                />
+              ) : (
+                <SpeakerSegmentView
+                  segments={note.segments}
+                  noteId={id}
+                  speakerNames={noteSpeakerNames}
+                  onSeek={handleSeek}
+                  currentTime={currentTime}
+                />
+              )
             ) : (
               <div className="text-sm text-[var(--color-text-secondary)] leading-7 whitespace-pre-wrap">
                 {showTranslated && note.translatedContent ? note.translatedContent : note.content}

@@ -38,8 +38,13 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   // Not authenticated → redirect to login
+  useEffect(() => {
+    if (isChecked && !isLoading && !user && pathname !== '/login' && !pathname.startsWith('/share/')) {
+      router.replace('/login');
+    }
+  }, [isChecked, isLoading, user, pathname, router]);
+
   if (!user) {
-    router.replace('/login');
     return null;
   }
 

@@ -468,11 +468,27 @@ export default function RecordPage() {
 
         showProgress('transcribing', '🎧 正在转录音频...');
         const engineForMode = store.asrEngineMap[mode] || 'qwen3';
-        const wxResult = engineForMode === 'qwen3'
-          ? await transcribeWithQwen3(file, store.qwenAsrEndpoint)
-          : await transcribeWithWhisperX(file, store.whisperxEndpoint, {
-              diarize: mode === 'meeting' || mode === 'interview',
-            });
+        const fallbackEngine = engineForMode === 'whisperx' ? 'qwen3' : 'whisperx';
+        let wxResult;
+        try {
+          wxResult = engineForMode === 'qwen3'
+            ? await transcribeWithQwen3(file, store.qwenAsrEndpoint)
+            : await transcribeWithWhisperX(file, store.whisperxEndpoint, {
+                diarize: mode === 'meeting' || mode === 'interview',
+              });
+        } catch (primaryErr) {
+          // Primary engine failed — try fallback
+          showProgress('transcribing', `⚠️ ${engineForMode} 失败，正在尝试 ${fallbackEngine}...`);
+          try {
+            wxResult = fallbackEngine === 'qwen3'
+              ? await transcribeWithQwen3(file, store.qwenAsrEndpoint)
+              : await transcribeWithWhisperX(file, store.whisperxEndpoint, {
+                  diarize: mode === 'meeting' || mode === 'interview',
+                });
+          } catch {
+            throw primaryErr;
+          }
+        }
         const segments = wxResult.segments.map(s => ({ start: s.start, end: s.end, text: s.text, speaker: s.speaker }));
         const speakers = new Set(segments.map(s => s.speaker).filter(Boolean));
         const fullText = segmentsToTranscript(segments);

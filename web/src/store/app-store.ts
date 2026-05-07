@@ -44,6 +44,7 @@ export interface Note {
   title: string;
   content: string;
   translatedContent?: string;    // LLM-translated transcript (e.g. EN→ZH)
+  translatedSegments?: TranscriptSegment[];  // Segment-level translation (preserves speaker view)
   targetLanguage?: string;       // Translation target language code (e.g. 'zh')
   summary: string;
   keyPoints: string[];

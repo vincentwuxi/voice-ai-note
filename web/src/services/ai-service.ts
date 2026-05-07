@@ -237,3 +237,113 @@ export async function translateTranscript(
   return data.choices?.[0]?.message?.content || '';
 }
 
+/**
+ * Translate segments while preserving their structure (timestamps, speaker IDs).
+ * Groups consecutive segments by speaker, translates each group, then maps
+ * translated text back onto original segment boundaries.
+ */
+export async function translateSegments(
+  segments: TranscriptSegment[],
+  targetLang: string,
+  apiEndpoint: string,
+  apiKey: string,
+  model: string
+): Promise<TranscriptSegment[]> {
+  if (!segments || segments.length === 0) return [];
+
+  const langNames: Record<string, string> = {
+    'zh': '中文', 'en': 'English', 'ja': '日本語',
+    'ko': '한국어', 'fr': 'Français', 'de': 'Deutsch',
+    'es': 'Español', 'it': 'Italiano', 'pt': 'Português',
+    'ru': 'Русский', 'ar': 'العربية',
+  };
+  const targetName = langNames[targetLang] || targetLang;
+
+  // Group consecutive segments by speaker
+  const groups: { speaker: string; texts: string[]; segIndices: number[] }[] = [];
+  let currentGroup: typeof groups[0] | null = null;
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const speaker = seg.speaker || 'SPEAKER_00';
+    if (!currentGroup || currentGroup.speaker !== speaker) {
+      currentGroup = { speaker, texts: [seg.text], segIndices: [i] };
+      groups.push(currentGroup);
+    } else {
+      currentGroup.texts.push(seg.text);
+      currentGroup.segIndices.push(i);
+    }
+  }
+
+  // Build a numbered input so LLM can return translations in the same order
+  const numberedInput = groups.map((g, i) => `[${i}] ${g.texts.join('')}`).join('\n');
+
+  const res = await fetch(`${apiEndpoint}/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        {
+          role: 'system',
+          content: `你是专业翻译助手。用户会提供编号的段落，请将每一段准确翻译为${targetName}。
+规则：
+1. 保持编号格式 [0], [1], [2]... 不变
+2. 每段翻译独占一行
+3. 翻译要自然流畅、符合目标语言习惯
+4. 专业术语保留原文在括号中标注
+5. 只输出翻译结果，不要添加任何额外说明`,
+        },
+        { role: 'user', content: numberedInput },
+      ],
+      temperature: 0.2,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`翻译失败 (${res.status})`);
+  }
+
+  const data = await res.json();
+  const translatedText = data.choices?.[0]?.message?.content || '';
+
+  // Parse numbered output back into groups
+  const translatedGroups: string[] = [];
+  const lines = translatedText.split('\n').filter((l: string) => l.trim());
+  for (const line of lines) {
+    const match = line.match(/^\[(\d+)\]\s*(.*)/);
+    if (match) {
+      const idx = parseInt(match[1]);
+      translatedGroups[idx] = match[2].trim();
+    }
+  }
+
+  // Map translations back onto segments, preserving timestamps and speaker IDs
+  const result: TranscriptSegment[] = segments.map(seg => ({ ...seg }));
+  for (let gi = 0; gi < groups.length; gi++) {
+    const group = groups[gi];
+    const translated = translatedGroups[gi] || group.texts.join('');
+    // If group has only one segment, assign directly
+    if (group.segIndices.length === 1) {
+      result[group.segIndices[0]].text = translated;
+    } else {
+      // Distribute translated text across segments proportionally by original text length
+      const totalOrigLen = group.texts.reduce((sum, t) => sum + t.length, 0);
+      let offset = 0;
+      for (let si = 0; si < group.segIndices.length; si++) {
+        const origLen = group.texts[si].length;
+        const proportion = origLen / totalOrigLen;
+        const charCount = si < group.segIndices.length - 1
+          ? Math.round(translated.length * proportion)
+          : translated.length - offset;
+        result[group.segIndices[si]].text = translated.slice(offset, offset + charCount);
+        offset += charCount;
+      }
+    }
+  }
+
+  return result;
+}
+
