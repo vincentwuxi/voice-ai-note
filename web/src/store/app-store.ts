@@ -7,27 +7,44 @@ export type RecordingMode = 'thoughts' | 'meeting' | 'lecture' | 'interview' | '
 export type NoteTag = 'inspiration' | 'project' | 'personal' | 'reading' | 'design';
 export type AITemplate = 'meeting' | 'reading' | 'brainstorm' | 'interview' | 'journal' | 'auto';
 
-// Sync note to D1 cloud — updates syncStatus in store
-function syncNoteToCloud(note: Note) {
-  fetch('/api/notes', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      note: {
-        ...note,
-        createdAt: note.createdAt instanceof Date ? note.createdAt.toISOString() : note.createdAt,
-        updatedAt: note.updatedAt instanceof Date ? note.updatedAt.toISOString() : note.updatedAt,
-      }
-    }),
-  }).then(res => {
+// Sync note to D1 cloud — with exponential backoff retry (max 3 attempts)
+async function syncNoteToCloud(note: Note, attempt = 0) {
+  const MAX_RETRIES = 3;
+  const BACKOFF_BASE_MS = 1000;
+
+  try {
+    const res = await fetch('/api/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        note: {
+          ...note,
+          createdAt: note.createdAt instanceof Date ? note.createdAt.toISOString() : note.createdAt,
+          updatedAt: note.updatedAt instanceof Date ? note.updatedAt.toISOString() : note.updatedAt,
+        }
+      }),
+    });
+
     if (res.ok) {
       useAppStore.getState().markSynced(note.id);
+    } else if (attempt < MAX_RETRIES) {
+      const delay = BACKOFF_BASE_MS * Math.pow(2, attempt);
+      console.warn(`[Sync] Attempt ${attempt + 1} failed (${res.status}), retrying in ${delay}ms...`);
+      setTimeout(() => syncNoteToCloud(note, attempt + 1), delay);
     } else {
+      console.error(`[Sync] All ${MAX_RETRIES} attempts failed for note ${note.id}`);
       useAppStore.getState().markSyncFailed(note.id);
     }
-  }).catch(() => {
-    useAppStore.getState().markSyncFailed(note.id);
-  });
+  } catch (err) {
+    if (attempt < MAX_RETRIES) {
+      const delay = BACKOFF_BASE_MS * Math.pow(2, attempt);
+      console.warn(`[Sync] Network error on attempt ${attempt + 1}, retrying in ${delay}ms...`, err);
+      setTimeout(() => syncNoteToCloud(note, attempt + 1), delay);
+    } else {
+      console.error(`[Sync] All ${MAX_RETRIES} attempts failed for note ${note.id}`, err);
+      useAppStore.getState().markSyncFailed(note.id);
+    }
+  }
 }
 
 export interface TranscriptSegment {
