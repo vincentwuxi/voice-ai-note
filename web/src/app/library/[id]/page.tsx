@@ -1,13 +1,15 @@
 'use client';
 
 import { use, useCallback } from 'react';
-import { ArrowLeft, Share2, Download, Square, CheckSquare, Pencil, Users, Mic, FileText, FileJson, Subtitles, Edit3, Check, X, Plus, Trash2, RefreshCw, Loader2, RotateCcw, Languages } from 'lucide-react';
-import { useAppStore, NoteTag, AI_TEMPLATES, AITemplate } from '@/store/app-store';
+import { ArrowLeft, Share2, Download, Pencil, Users, Mic, FileText, FileJson, Subtitles, Check, X, Trash2, Loader2, RotateCcw, Languages } from 'lucide-react';
+import { useAppStore, NoteTag } from '@/store/app-store';
+import type { AITemplate } from '@/store/types';
 import { getAudioBlob, exportToMarkdown, exportToSRT, exportToJSON } from '@/services/db';
 import { useRouter } from 'next/navigation';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import SpeakerSegmentView from '@/components/speaker-segment-view';
 import AudioPlayer, { seekAudioPlayer } from '@/components/audio-player';
+import NoteEditor, { getNoteEditorEdits } from '@/components/note-editor';
 import { TAG_CONFIG, formatDuration, formatFullDate } from '@/lib/constants';
 
 
@@ -21,14 +23,7 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [isResummarizing, setIsResummarizing] = useState(false);
-  const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [editTitle, setEditTitle] = useState('');
-  const [editSummary, setEditSummary] = useState('');
-  const [editKeyPoints, setEditKeyPoints] = useState<string[]>([]);
-  const [editActionItems, setEditActionItems] = useState<string[]>([]);
-  const [completedTodos, setCompletedTodos] = useState<Set<number>>(new Set());
-  const [todosInitialized, setTodosInitialized] = useState(false);
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
@@ -44,14 +39,6 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const handleSeek = useCallback((time: number) => {
     seekAudioPlayer(id, time);
   }, [id]);
-
-  // P1-6: Initialize completedTodos from persisted note data
-  useEffect(() => {
-    if (note && !todosInitialized) {
-      setCompletedTodos(new Set(note.completedTodos || []));
-      setTodosInitialized(true);
-    }
-  }, [note, todosInitialized]);
 
   if (!note) {
     return (
@@ -97,18 +84,14 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const startEditing = () => {
     if (!note) return;
     setEditTitle(note.title);
-    setEditSummary(note.summary);
-    setEditKeyPoints([...note.keyPoints]);
-    setEditActionItems([...note.actionItems]);
     setIsEditing(true);
   };
 
   const saveEdits = () => {
+    const editorEdits = getNoteEditorEdits(id);
     updateNote(id, {
       title: editTitle,
-      summary: editSummary,
-      keyPoints: editKeyPoints.filter(p => p.trim()),
-      actionItems: editActionItems.filter(a => a.trim()),
+      ...(editorEdits || {}),
       updatedAt: new Date(),
     });
     setIsEditing(false);
@@ -122,36 +105,7 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   };
 
 
-  const resummarize = async (template: AITemplate) => {
-    setShowTemplateSelector(false);
-    if (!note || !note.content) return;
-    setIsResummarizing(true);
-    try {
-      const { summarizeWithLLM } = await import('@/services/ai-service');
-      const { getSharedLLMConfig } = await import('@/services/shared-config');
-      const llmConfig = await getSharedLLMConfig();
-      if (!llmConfig.apiEndpoint || !llmConfig.apiKey) {
-        setFeedbackMsg({ text: '⚙️ 请先在管理后台配置 LLM API 密钥', type: 'error' });
-        setTimeout(() => setFeedbackMsg(null), 4000);
-        setIsResummarizing(false);
-        return;
-      }
-      const result = await summarizeWithLLM(
-        note.content, template, llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel
-      );
-      updateNote(id, {
-        title: result.title,
-        summary: result.summary,
-        keyPoints: result.keyPoints,
-        actionItems: result.actionItems,
-        updatedAt: new Date(),
-      });
-    } catch (err) {
-      setFeedbackMsg({ text: `❌ 重新摘要失败: ${err instanceof Error ? err.message : '未知错误'}`, type: 'error' });
-      setTimeout(() => setFeedbackMsg(null), 5000);
-    }
-    setIsResummarizing(false);
-  };
+
 
   // ===== Re-transcribe: reload audio from storage and re-run ASR + LLM =====
   const retranscribe = async (forceEngine?: 'whisperx' | 'qwen3') => {
@@ -391,150 +345,7 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Left - AI Analysis */}
         <div className="lg:col-span-2 space-y-5">
-          {/* Summary */}
-          <div className="card p-5">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-primary)]">
-                <Pencil className="w-4 h-4" /> AI 摘要
-              </h2>
-              {!isEditing && (
-                <div className="relative">
-                  <button
-                    onClick={() => setShowTemplateSelector(!showTemplateSelector)}
-                    disabled={isResummarizing}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-medium text-[var(--color-text-tertiary)] bg-[var(--color-bg-surface)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 transition-all cursor-pointer disabled:opacity-50"
-                    title="重新生成 AI 摘要"
-                  >
-                    {isResummarizing ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-                    {isResummarizing ? '生成中...' : '重新摘要'}
-                  </button>
-                  {showTemplateSelector && (
-                    <div className="absolute right-0 top-full mt-1 w-40 card p-1.5 z-50 shadow-xl border border-white/10">
-                      {(Object.entries(AI_TEMPLATES) as [AITemplate, { label: string; icon: string }][]).map(([key, tmpl]) => (
-                        <button
-                          key={key}
-                          onClick={() => resummarize(key)}
-                          className="w-full text-left px-3 py-2 rounded-lg text-xs flex items-center gap-2 text-[var(--color-text-secondary)] hover:bg-white/5 hover:text-[var(--color-text-primary)] cursor-pointer transition-colors"
-                        >
-                          <span>{tmpl.icon}</span> {tmpl.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            {isEditing ? (
-              <textarea
-                value={editSummary}
-                onChange={e => setEditSummary(e.target.value)}
-                rows={3}
-                className="w-full text-sm text-[var(--color-text-secondary)] leading-relaxed bg-[var(--color-bg-surface)] rounded-lg p-3 border border-white/10 focus:border-[var(--color-primary)]/50 outline-none resize-none"
-              />
-            ) : (
-              <p className="text-sm text-[var(--color-text-secondary)] leading-relaxed">{note.summary}</p>
-            )}
-          </div>
-
-          {/* Key Points */}
-          {note.keyPoints.length > 0 && (
-            <div className="card p-5">
-              <h2 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">📌 关键要点</h2>
-              {isEditing ? (
-                <div className="space-y-2">
-                  {editKeyPoints.map((point, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <input
-                        value={point}
-                        onChange={e => {
-                          const next = [...editKeyPoints];
-                          next[i] = e.target.value;
-                          setEditKeyPoints(next);
-                        }}
-                        className="flex-1 text-sm bg-[var(--color-bg-surface)] rounded-lg px-3 py-2 border border-white/10 focus:border-[var(--color-primary)]/50 outline-none text-[var(--color-text-secondary)]"
-                      />
-                      <button onClick={() => setEditKeyPoints(editKeyPoints.filter((_, j) => j !== i))} className="p-1 text-[var(--color-text-tertiary)] hover:text-[var(--color-error)] cursor-pointer">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => setEditKeyPoints([...editKeyPoints, ''])}
-                    className="flex items-center gap-1 text-xs text-[var(--color-primary)] hover:brightness-125 cursor-pointer mt-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> 添加要点
-                  </button>
-                </div>
-              ) : (
-                <ul className="space-y-2">
-                  {note.keyPoints.map((point, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-[var(--color-text-secondary)]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-primary)] mt-1.5 shrink-0" />
-                      {point}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-
-          {/* Action Items */}
-          {note.actionItems.length > 0 && (
-            <div className="card p-5">
-              <h2 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">☑️ 待办事项</h2>
-              {isEditing ? (
-                <div className="space-y-2">
-                  {editActionItems.map((item, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <input
-                        value={item}
-                        onChange={e => {
-                          const next = [...editActionItems];
-                          next[i] = e.target.value;
-                          setEditActionItems(next);
-                        }}
-                        className="flex-1 text-sm bg-[var(--color-bg-surface)] rounded-lg px-3 py-2 border border-white/10 focus:border-[var(--color-primary)]/50 outline-none text-[var(--color-text-secondary)]"
-                      />
-                      <button onClick={() => setEditActionItems(editActionItems.filter((_, j) => j !== i))} className="p-1 text-[var(--color-text-tertiary)] hover:text-[var(--color-error)] cursor-pointer">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => setEditActionItems([...editActionItems, ''])}
-                    className="flex items-center gap-1 text-xs text-[var(--color-primary)] hover:brightness-125 cursor-pointer mt-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> 添加待办
-                  </button>
-                </div>
-              ) : (
-                <ul className="space-y-2.5">
-                  {note.actionItems.map((item, i) => {
-                    const done = completedTodos.has(i);
-                    return (
-                      <li
-                        key={i}
-                        onClick={() => {
-                          const next = new Set(completedTodos);
-                          if (done) next.delete(i); else next.add(i);
-                          setCompletedTodos(next);
-                          updateNote(id, { completedTodos: Array.from(next) });
-                        }}
-                        className={`flex items-center gap-2.5 text-sm cursor-pointer transition-all ${done ? 'text-[var(--color-text-tertiary)] line-through opacity-60' : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'}`}
-                      >
-                        {done ? (
-                          <CheckSquare className="w-4 h-4 text-[var(--color-success)] shrink-0" />
-                        ) : (
-                          <Square className="w-4 h-4 text-[var(--color-success)] shrink-0" />
-                        )}
-                        {item}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          )}
+          <NoteEditor note={note} noteId={id} isEditing={isEditing} />
 
           {/* Audio Player */}
           <div className="card p-5">
