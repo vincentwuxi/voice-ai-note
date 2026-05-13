@@ -1,4 +1,5 @@
 import { TranscriptSegment, AI_TEMPLATES, AITemplate } from '@/store/app-store';
+import { LANGUAGE_NAMES } from '@/lib/constants';
 
 export interface WhisperXResponse {
   language: string;
@@ -196,13 +197,7 @@ export async function translateTranscript(
   apiKey: string,
   model: string
 ): Promise<string> {
-  const langNames: Record<string, string> = {
-    'zh': '中文', 'en': 'English', 'ja': '日本語',
-    'ko': '한국어', 'fr': 'Français', 'de': 'Deutsch',
-    'es': 'Español', 'it': 'Italiano', 'pt': 'Português',
-    'ru': 'Русский', 'ar': 'العربية',
-  };
-  const targetName = langNames[targetLang] || targetLang;
+  const targetName = LANGUAGE_NAMES[targetLang] || targetLang;
 
   const res = await fetch(`${apiEndpoint}/v1/chat/completions`, {
     method: 'POST',
@@ -251,13 +246,7 @@ export async function translateSegments(
 ): Promise<TranscriptSegment[]> {
   if (!segments || segments.length === 0) return [];
 
-  const langNames: Record<string, string> = {
-    'zh': '中文', 'en': 'English', 'ja': '日本語',
-    'ko': '한국어', 'fr': 'Français', 'de': 'Deutsch',
-    'es': 'Español', 'it': 'Italiano', 'pt': 'Português',
-    'ru': 'Русский', 'ar': 'العربية',
-  };
-  const targetName = langNames[targetLang] || targetLang;
+  const targetName = LANGUAGE_NAMES[targetLang] || targetLang;
 
   // Group consecutive segments by speaker
   const groups: { speaker: string; texts: string[]; segIndices: number[] }[] = [];

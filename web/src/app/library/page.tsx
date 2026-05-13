@@ -5,45 +5,10 @@ import { Search, Play, Users, Trash2, X, AlertTriangle, ArrowUpDown, Cloud, Clou
 import { useAppStore, NoteTag, Note } from '@/store/app-store';
 import { useRouter } from 'next/navigation';
 import { exportToJSON } from '@/services/db';
+import { TAG_CONFIG, TAG_FILTERS, MODE_FILTERS, ModeFilter, formatDuration, formatShortDate } from '@/lib/constants';
 
 type SortMode = 'newest' | 'oldest' | 'longest' | 'shortest';
-type ModeFilter = 'all' | 'thoughts' | 'meeting' | 'lecture' | 'interview' | 'journal';
 
-const modeFilters: { id: ModeFilter; label: string }[] = [
-  { id: 'all', label: '全部' },
-  { id: 'meeting', label: '💼 会议' },
-  { id: 'interview', label: '🎤 访谈' },
-  { id: 'thoughts', label: '💡 灵感' },
-  { id: 'lecture', label: '📚 讲座' },
-  { id: 'journal', label: '📓 日记' },
-];
-
-const tagConfig: Record<NoteTag, { label: string; color: string; bgColor: string }> = {
-  inspiration: { label: '灵感', color: 'var(--color-tag-amber)', bgColor: 'rgba(245, 158, 11, 0.15)' },
-  project: { label: '项目', color: 'var(--color-tag-blue)', bgColor: 'rgba(59, 130, 246, 0.15)' },
-  personal: { label: '个人', color: 'var(--color-tag-emerald)', bgColor: 'rgba(16, 185, 129, 0.15)' },
-  reading: { label: '阅读', color: 'var(--color-tag-indigo)', bgColor: 'rgba(99, 102, 241, 0.15)' },
-  design: { label: '设计', color: 'var(--color-tag-purple)', bgColor: 'rgba(139, 92, 246, 0.15)' },
-};
-
-const tagFilters: { id: NoteTag | 'all'; label: string }[] = [
-  { id: 'all', label: '全部' },
-  { id: 'inspiration', label: '灵感' },
-  { id: 'project', label: '项目' },
-  { id: 'personal', label: '个人' },
-  { id: 'reading', label: '阅读' },
-  { id: 'design', label: '设计' },
-];
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-}
-
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric' }).format(date);
-}
 
 export default function LibraryPage() {
   const { notes, activeTagFilter, setActiveTagFilter, searchQuery, setSearchQuery, deleteNote, addNote } = useAppStore();
@@ -273,9 +238,9 @@ export default function LibraryPage() {
 
       {/* Tag Filters */}
       <div className="flex gap-2 mb-8 overflow-x-auto pb-2 scrollbar-none">
-        {tagFilters.map((tag) => {
+        {TAG_FILTERS.map((tag) => {
           const isActive = activeTagFilter === tag.id;
-          const config = tag.id !== 'all' ? tagConfig[tag.id] : null;
+          const config = tag.id !== 'all' ? TAG_CONFIG[tag.id] : null;
           return (
             <button
               key={tag.id}
@@ -297,7 +262,7 @@ export default function LibraryPage() {
 
       {/* Mode Filters */}
       <div className="flex gap-2 mb-4 overflow-x-auto pb-1 scrollbar-none">
-        {modeFilters.map((m) => (
+        {MODE_FILTERS.map((m) => (
           <button
             key={m.id}
             onClick={() => setModeFilter(m.id)}
@@ -345,7 +310,7 @@ export default function LibraryPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredNotes.map((note) => {
             const tag = note.tags[0];
-            const config = tag ? tagConfig[tag] : null;
+            const config = tag ? TAG_CONFIG[tag] : null;
             const isSelected = selectedIds.has(note.id);
             return (
               <div key={note.id} className={`card p-5 text-left cursor-pointer group relative transition-all ${isSelected ? 'ring-2 ring-[var(--color-primary)] bg-[var(--color-primary)]/5' : ''}`}>
@@ -420,7 +385,7 @@ export default function LibraryPage() {
                       })()}
                     </div>
                     <div className="flex items-center gap-2">
-                      <span>{formatDate(note.createdAt)}</span>
+                      <span>{formatShortDate(note.createdAt)}</span>
                       {/* Sync Status */}
                       {note.syncStatus === 'synced' && <span title="已同步"><Cloud className="w-3 h-3 text-[var(--color-success)]" /></span>}
                       {note.syncStatus === 'syncing' && <span title="同步中"><Loader2 className="w-3 h-3 text-[var(--color-primary)] animate-spin" /></span>}

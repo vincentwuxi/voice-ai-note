@@ -11,7 +11,7 @@ export async function GET() {
 
   const params = new URLSearchParams({
     client_id: clientId,
-    redirect_uri: 'https://voice.aivolo.com/api/auth/callback',
+    redirect_uri: `${env.APP_URL}/api/auth/callback`,
     response_type: 'code',
     scope: 'openid email profile',
     access_type: 'online',

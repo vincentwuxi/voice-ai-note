@@ -4,14 +4,9 @@ import { useMemo, useState, useCallback } from 'react';
 import { useAppStore, NoteTag } from '@/store/app-store';
 import { Sparkles, ArrowRight, Lightbulb, TrendingUp, Link2, BarChart3, Brain, Loader2, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { TAG_CONFIG } from '@/lib/constants';
 
-const tagConfig: Record<NoteTag, { label: string; color: string }> = {
-  inspiration: { label: '灵感', color: 'var(--color-tag-amber)' },
-  project: { label: '项目', color: 'var(--color-tag-blue)' },
-  personal: { label: '个人', color: 'var(--color-tag-emerald)' },
-  reading: { label: '阅读', color: 'var(--color-tag-indigo)' },
-  design: { label: '设计', color: 'var(--color-tag-purple)' },
-};
+
 
 // Stop words to filter out meaningless matches
 const STOP_WORDS = new Set([
@@ -247,7 +242,7 @@ ${noteSummaries}
           </div>
           <div className="space-y-3">
             {tagStats.map(([tag, count]) => {
-              const config = tagConfig[tag];
+              const config = TAG_CONFIG[tag];
               const pct = Math.round((count / notes.length) * 100);
               return (
                 <div key={tag} className="flex items-center gap-3">

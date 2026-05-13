@@ -1,5 +1,6 @@
 interface CloudflareEnv {
   ASSETS: Fetcher;
+  APP_URL: string;
   WHISPERX_ENDPOINT: string;
   QWEN_ASR_ENDPOINT: string;
   CF_ACCESS_CLIENT_ID: string;

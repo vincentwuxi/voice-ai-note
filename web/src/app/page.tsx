@@ -5,6 +5,7 @@ import { Mic, Pause, Play, Square, Shield, Trash2, Wand2, Upload, CheckCircle2, 
 import { useAppStore, RecordingMode, AI_TEMPLATES, AITemplate, MODE_TEMPLATE_MAP } from '@/store/app-store';
 import { saveAudioBlob, saveRecordingDraft, loadRecordingDraft, clearRecordingDraft } from '@/services/db';
 import { useRouter } from 'next/navigation';
+import { RECORDING_MODES, SPEECH_LANGUAGES, formatRecordingTime } from '@/lib/constants';
 
 // Upload audio to R2 cloud storage (fire-and-forget)
 async function uploadToR2(noteId: string, blob: Blob) {
@@ -18,31 +19,7 @@ async function uploadToR2(noteId: string, blob: Blob) {
   }
 }
 
-const modes: { id: RecordingMode; label: string; sublabel: string }[] = [
-  { id: 'thoughts', label: '所思所想', sublabel: 'Thoughts' },
-  { id: 'meeting', label: '会议模式', sublabel: 'Meeting' },
-  { id: 'lecture', label: '讲座/阅读', sublabel: 'Lecture' },
-  { id: 'interview', label: '访谈', sublabel: 'Interview' },
-  { id: 'journal', label: '日记', sublabel: 'Journal' },
-];
-
-const languages = [
-  { code: 'zh-CN', label: '中文', flag: '🇨🇳' },
-  { code: 'en-US', label: 'English', flag: '🇺🇸' },
-  { code: 'ja-JP', label: '日本語', flag: '🇯🇵' },
-  { code: 'ko-KR', label: '한국어', flag: '🇰🇷' },
-  { code: 'de-DE', label: 'Deutsch', flag: '🇩🇪' },
-  { code: 'fr-FR', label: 'Français', flag: '🇫🇷' },
-];
-
 type ProcessingStage = 'idle' | 'uploading' | 'transcribing' | 'summarizing' | 'done' | 'error';
-
-function formatTime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = seconds % 60;
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-}
 
 export default function RecordPage() {
   const {
@@ -566,7 +543,7 @@ export default function RecordPage() {
             <AlertCircle className="w-5 h-5 text-[var(--color-tag-amber)] flex-shrink-0" />
             <div>
               <p className="text-sm font-semibold text-[var(--color-text-primary)]">发现未完成的录音</p>
-              <p className="text-xs text-[var(--color-text-tertiary)]">录时 {formatTime(draftRecovery.elapsed)} · {new Date().toLocaleDateString()}</p>
+              <p className="text-xs text-[var(--color-text-tertiary)]">录时 {formatRecordingTime(draftRecovery.elapsed)} · {new Date().toLocaleDateString()}</p>
             </div>
           </div>
           <div className="flex gap-2">
@@ -634,7 +611,7 @@ export default function RecordPage() {
 
       {/* Timer */}
       <div className="text-6xl lg:text-8xl font-bold tracking-tight mb-2 tabular-nums">
-        {formatTime(elapsedTime)}
+        {formatRecordingTime(elapsedTime)}
       </div>
 
       {/* Waveform */}
@@ -690,7 +667,7 @@ export default function RecordPage() {
       <div className="flex flex-col items-center gap-4 mb-8">
         {/* Mode Selector */}
         <div className="flex gap-2 lg:gap-3 flex-wrap justify-center">
-          {modes.map((mode) => (
+          {RECORDING_MODES.map((mode) => (
             <button
               key={mode.id}
               onClick={() => !isRecording && setRecordingMode(mode.id)}
@@ -750,11 +727,11 @@ export default function RecordPage() {
             } text-[var(--color-text-tertiary)]`}
           >
             <Globe className="w-3.5 h-3.5" />
-            <span>语言: {languages.find(l => l.code === speechLang)?.flag} {languages.find(l => l.code === speechLang)?.label}</span>
+            <span>语言: {SPEECH_LANGUAGES.find(l => l.code === speechLang)?.flag} {SPEECH_LANGUAGES.find(l => l.code === speechLang)?.label}</span>
           </button>
           {showLangMenu && !isRecording && (
             <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-48 card p-2 z-50 shadow-xl">
-              {languages.map(lang => (
+              {SPEECH_LANGUAGES.map(lang => (
                 <button
                   key={lang.code}
                   onClick={() => { setSpeechLang(lang.code); setShowLangMenu(false); }}

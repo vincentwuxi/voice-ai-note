@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code');
 
   if (!code) {
-    return NextResponse.redirect('https://voice.aivolo.com/login?error=no_code');
+    return NextResponse.redirect(`${env.APP_URL}/login?error=no_code`);
   }
 
   try {
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
         code,
         client_id: env.GOOGLE_CLIENT_ID,
         client_secret: env.GOOGLE_CLIENT_SECRET,
-        redirect_uri: 'https://voice.aivolo.com/api/auth/callback',
+        redirect_uri: `${env.APP_URL}/api/auth/callback`,
         grant_type: 'authorization_code',
       }),
     });
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     if (!tokenRes.ok) {
       const err = await tokenRes.text();
       console.error('Token exchange failed:', err);
-      return NextResponse.redirect('https://voice.aivolo.com/login?error=token_failed');
+      return NextResponse.redirect(`${env.APP_URL}/login?error=token_failed`);
     }
 
     const tokens = await tokenRes.json() as { access_token: string };
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     });
 
     if (!userInfoRes.ok) {
-      return NextResponse.redirect('https://voice.aivolo.com/login?error=userinfo_failed');
+      return NextResponse.redirect(`${env.APP_URL}/login?error=userinfo_failed`);
     }
 
     const googleUser = await userInfoRes.json() as {
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
     if (existing) {
       // User exists — check status
       if (existing.status === 'disabled') {
-        return NextResponse.redirect('https://voice.aivolo.com/login?error=disabled');
+        return NextResponse.redirect(`${env.APP_URL}/login?error=disabled`);
       }
       userId = existing.id;
       role = existing.role;
@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
     }, env.JWT_SECRET);
 
     // 5. Set cookie and redirect to app
-    const response = NextResponse.redirect('https://voice.aivolo.com/');
+    const response = NextResponse.redirect(`${env.APP_URL}/`);
     response.cookies.set('vm_token', token, {
       httpOnly: true,
       secure: true,
@@ -106,6 +106,6 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (err) {
     console.error('OAuth callback error:', err);
-    return NextResponse.redirect('https://voice.aivolo.com/login?error=server_error');
+    return NextResponse.redirect(`${env.APP_URL}/login?error=server_error`);
   }
 }

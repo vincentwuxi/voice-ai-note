@@ -14,6 +14,7 @@ binding = "ASSETS"
 
 # ASR endpoints (public vars)
 [vars]
+APP_URL = "https://voice.aivolo.com"
 WHISPERX_ENDPOINT = "https://whisperx.aivolo.com"
 QWEN_ASR_ENDPOINT = "https://qwen-asr.aivolo.com"
 

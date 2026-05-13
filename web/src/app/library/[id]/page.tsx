@@ -7,27 +7,8 @@ import { getAudioBlob, exportToMarkdown, exportToSRT, exportToJSON } from '@/ser
 import { useRouter } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
 import SpeakerSegmentView from '@/components/speaker-segment-view';
+import { TAG_CONFIG, formatDuration, formatFullDate } from '@/lib/constants';
 
-const tagConfig: Record<NoteTag, { label: string; color: string; bgColor: string }> = {
-  inspiration: { label: '灵感', color: 'var(--color-tag-amber)', bgColor: 'rgba(245, 158, 11, 0.15)' },
-  project: { label: '项目', color: 'var(--color-tag-blue)', bgColor: 'rgba(59, 130, 246, 0.15)' },
-  personal: { label: '个人', color: 'var(--color-tag-emerald)', bgColor: 'rgba(16, 185, 129, 0.15)' },
-  reading: { label: '阅读', color: 'var(--color-tag-indigo)', bgColor: 'rgba(99, 102, 241, 0.15)' },
-  design: { label: '设计', color: 'var(--color-tag-purple)', bgColor: 'rgba(139, 92, 246, 0.15)' },
-};
-
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-}
-
-function formatFullDate(date: Date): string {
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-  }).format(date);
-}
 
 
 
@@ -135,7 +116,7 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   const tag = note.tags[0];
-  const config = tag ? tagConfig[tag] : null;
+  const config = tag ? TAG_CONFIG[tag] : null;
   const hasSegments = note.segments && note.segments.length > 0;
   const isMultiSpeaker = note.speakerCount > 1;
   const noteSpeakerNames = speakerNames[id] || {};
