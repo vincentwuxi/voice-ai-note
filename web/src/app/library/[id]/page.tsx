@@ -1,12 +1,13 @@
 'use client';
 
 import { use, useCallback } from 'react';
-import { ArrowLeft, Play, Pause, Share2, Download, Square, CheckSquare, Pencil, Users, Mic, FileText, FileJson, Subtitles, Edit3, Check, X, Plus, Trash2, RefreshCw, Loader2, RotateCcw, Languages } from 'lucide-react';
+import { ArrowLeft, Share2, Download, Square, CheckSquare, Pencil, Users, Mic, FileText, FileJson, Subtitles, Edit3, Check, X, Plus, Trash2, RefreshCw, Loader2, RotateCcw, Languages } from 'lucide-react';
 import { useAppStore, NoteTag, AI_TEMPLATES, AITemplate } from '@/store/app-store';
 import { getAudioBlob, exportToMarkdown, exportToSRT, exportToJSON } from '@/services/db';
 import { useRouter } from 'next/navigation';
 import { useState, useRef, useEffect } from 'react';
 import SpeakerSegmentView from '@/components/speaker-segment-view';
+import AudioPlayer, { seekAudioPlayer } from '@/components/audio-player';
 import { TAG_CONFIG, formatDuration, formatFullDate } from '@/lib/constants';
 
 
@@ -16,13 +17,10 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const { notes, speakerNames } = useAppStore();
   const router = useRouter();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playProgress, setPlayProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [playbackRate, setPlaybackRate] = useState(1);
   const [isResummarizing, setIsResummarizing] = useState(false);
   const [showTemplateSelector, setShowTemplateSelector] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -39,65 +37,13 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const [showTranslated, setShowTranslated] = useState(false);
   const [showTranslateMenu, setShowTranslateMenu] = useState(false);
   const { updateNote, deleteNote } = useAppStore();
-  const audioRef = useRef<HTMLAudioElement>(null);
 
   const note = notes.find((n) => n.id === id);
 
-  // Load audio: R2 (cloud) → IndexedDB (local) → note.audioUrl (session)
-  useEffect(() => {
-    if (!note || !audioRef.current) return;
-    const audio = audioRef.current;
-    
-    // Try R2 cloud URL first
-    const r2Url = `/api/audio/${id}`;
-    fetch(r2Url, { method: 'HEAD' }).then(res => {
-      if (res.ok) {
-        audio.src = r2Url;
-        return;
-      }
-      throw new Error('Not in R2');
-    }).catch(() => {
-      // Fallback: IndexedDB local cache
-      getAudioBlob(id).then(blob => {
-        if (blob) {
-          audio.src = URL.createObjectURL(blob);
-        } else if (note.audioUrl) {
-          audio.src = note.audioUrl;
-        }
-      }).catch(() => {
-        if (note.audioUrl) audio.src = note.audioUrl;
-      });
-    });
-  }, [id, note]);
-
-  const togglePlay = useCallback(() => {
-    const audio = audioRef.current;
-    if (!audio || !audio.src) return;
-    if (isPlaying) { audio.pause(); }
-    else { audio.play().catch(() => {}); }
-    setIsPlaying(!isPlaying);
-  }, [isPlaying]);
-
+  // Seek handler for segment click navigation
   const handleSeek = useCallback((time: number) => {
-    const audio = audioRef.current;
-    if (!audio || !audio.src) return;
-    audio.currentTime = time;
-    if (!isPlaying) { audio.play().catch(() => {}); setIsPlaying(true); }
-  }, [isPlaying]);
-
-  // Update progress
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-    const onTime = () => {
-      setCurrentTime(audio.currentTime);
-      if (audio.duration) setPlayProgress((audio.currentTime / audio.duration) * 100);
-    };
-    const onEnd = () => { setIsPlaying(false); setPlayProgress(0); setCurrentTime(0); };
-    audio.addEventListener('timeupdate', onTime);
-    audio.addEventListener('ended', onEnd);
-    return () => { audio.removeEventListener('timeupdate', onTime); audio.removeEventListener('ended', onEnd); };
-  }, []);
+    seekAudioPlayer(id, time);
+  }, [id]);
 
   // P1-6: Initialize completedTodos from persisted note data
   useEffect(() => {
@@ -175,13 +121,6 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
     router.push('/library');
   };
 
-  const cyclePlaybackRate = () => {
-    const rates = [0.5, 0.75, 1, 1.25, 1.5, 2];
-    const idx = rates.indexOf(playbackRate);
-    const next = rates[(idx + 1) % rates.length];
-    setPlaybackRate(next);
-    if (audioRef.current) audioRef.current.playbackRate = next;
-  };
 
   const resummarize = async (template: AITemplate) => {
     setShowTemplateSelector(false);
@@ -303,7 +242,7 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
 
   return (
     <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-10">
-      <audio ref={audioRef} preload="metadata" />
+
 
       {/* Feedback Toast */}
       {feedbackMsg && (
@@ -600,37 +539,12 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
           {/* Audio Player */}
           <div className="card p-5">
             <h2 className="text-sm font-semibold text-[var(--color-text-primary)] mb-3">🎵 原始录音</h2>
-            <div className="flex items-center gap-4">
-              <button
-                onClick={togglePlay}
-                className="w-12 h-12 rounded-full bg-[var(--color-primary)] flex items-center justify-center cursor-pointer hover:bg-[var(--color-primary-light)] transition-colors flex-shrink-0"
-              >
-                {isPlaying ? <Pause className="w-5 h-5 text-black" /> : <Play className="w-5 h-5 text-black ml-0.5" />}
-              </button>
-              <div className="flex-1">
-                <div
-                  className="h-1.5 bg-[var(--color-bg-surface)] rounded-full overflow-hidden cursor-pointer"
-                  onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const pct = (e.clientX - rect.left) / rect.width;
-                    handleSeek(pct * note.duration);
-                  }}
-                >
-                  <div className="h-full bg-[var(--color-primary)] rounded-full transition-all" style={{ width: `${playProgress}%` }} />
-                </div>
-                <div className="flex justify-between mt-1.5 text-xs text-[var(--color-text-tertiary)]">
-                  <span>{formatDuration(Math.floor(currentTime))}</span>
-                  <span>{formatDuration(note.duration)}</span>
-                </div>
-              </div>
-              <button
-                onClick={cyclePlaybackRate}
-                className="px-2 py-1 rounded-lg text-xs font-bold text-[var(--color-text-secondary)] bg-[var(--color-bg-surface)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 transition-all cursor-pointer min-w-[3rem] text-center flex-shrink-0"
-                title="切换播放速度"
-              >
-                {playbackRate}x
-              </button>
-            </div>
+            <AudioPlayer
+              noteId={id}
+              duration={note.duration}
+              audioUrl={note.audioUrl}
+              onTimeUpdate={setCurrentTime}
+            />
           </div>
         </div>
 
