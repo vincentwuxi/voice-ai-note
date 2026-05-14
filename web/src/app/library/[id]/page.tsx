@@ -3,17 +3,28 @@
 import { use, useCallback } from 'react';
 import { ArrowLeft, Share2, Download, Pencil, Users, Mic, FileText, FileJson, Subtitles, Check, X, Trash2, Loader2, RotateCcw, Languages } from 'lucide-react';
 import { useAppStore, NoteTag } from '@/store/app-store';
-import type { AITemplate } from '@/store/types';
-import { getAudioBlob, exportToMarkdown, exportToSRT, exportToJSON } from '@/services/db';
+import { exportToMarkdown, exportToSRT, exportToJSON } from '@/services/db';
 import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import SpeakerSegmentView from '@/components/speaker-segment-view';
 import AudioPlayer, { seekAudioPlayer } from '@/components/audio-player';
 import NoteEditor, { getNoteEditorEdits } from '@/components/note-editor';
+import { useNoteActions } from '@/hooks/use-note-actions';
 import { TAG_CONFIG, formatDuration, formatFullDate } from '@/lib/constants';
 
-
-
+const TRANSLATE_LANGUAGES = [
+  { code: 'zh', label: '🇨🇳 中文' },
+  { code: 'en', label: '🇺🇸 English' },
+  { code: 'ja', label: '🇯🇵 日本語' },
+  { code: 'ko', label: '🇰🇷 한국어' },
+  { code: 'fr', label: '🇫🇷 Français' },
+  { code: 'de', label: '🇩🇪 Deutsch' },
+  { code: 'es', label: '🇪🇸 Español' },
+  { code: 'it', label: '🇮🇹 Italiano' },
+  { code: 'pt', label: '🇧🇷 Português' },
+  { code: 'ru', label: '🇷🇺 Русский' },
+  { code: 'ar', label: '🇸🇦 العربية' },
+];
 
 export default function NoteDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -26,14 +37,17 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
   const [editTitle, setEditTitle] = useState('');
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [isSharing, setIsSharing] = useState(false);
-  const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
-  const [isRetranscribing, setIsRetranscribing] = useState(false);
-  const [isTranslating, setIsTranslating] = useState(false);
-  const [showTranslated, setShowTranslated] = useState(false);
-  const [showTranslateMenu, setShowTranslateMenu] = useState(false);
   const { updateNote, deleteNote } = useAppStore();
 
   const note = notes.find((n) => n.id === id);
+
+  // Heavy async operations (retranscribe, translate)
+  const {
+    isRetranscribing, retranscribe,
+    isTranslating, showTranslated, showTranslateMenu, setShowTranslateMenu,
+    translateTo, toggleTranslation,
+    feedbackMsg,
+  } = useNoteActions(id, note);
 
   // Seek handler for segment click navigation
   const handleSeek = useCallback((time: number) => {
@@ -104,99 +118,8 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
     router.push('/library');
   };
 
-
-
-
-  // ===== Re-transcribe: reload audio from storage and re-run ASR + LLM =====
-  const retranscribe = async (forceEngine?: 'whisperx' | 'qwen3') => {
-    if (!note) return;
-    setIsRetranscribing(true);
-    setFeedbackMsg({ text: '🎧 正在加载音频...', type: 'success' });
-
-    try {
-      // Step 1: Load audio blob from R2 or IndexedDB
-      let audioBlob: Blob | null = null;
-
-      // Try R2 first
-      try {
-        const r2Res = await fetch(`/api/audio/${id}`);
-        if (r2Res.ok) {
-          audioBlob = await r2Res.blob();
-        }
-      } catch { /* R2 unavailable */ }
-
-      // Fallback to IndexedDB
-      if (!audioBlob) {
-        audioBlob = await getAudioBlob(id);
-      }
-
-      if (!audioBlob || audioBlob.size === 0) {
-        setFeedbackMsg({ text: '❌ 找不到原始音频文件，无法重新转录', type: 'error' });
-        setTimeout(() => setFeedbackMsg(null), 5000);
-        setIsRetranscribing(false);
-        return;
-      }
-
-      // Step 2: Run ASR with fallback
-      setFeedbackMsg({ text: '🎧 正在转录音频...', type: 'success' });
-      const { transcribeWithWhisperX, transcribeWithQwen3, summarizeWithLLM, segmentsToTranscript } = await import('@/services/ai-service');
-      const store = useAppStore.getState();
-      const engine = forceEngine || store.asrEngineMap[note.mode] || 'qwen3';
-      const fallbackEngine = engine === 'whisperx' ? 'qwen3' : 'whisperx';
-
-      let wxResult;
-      try {
-        wxResult = engine === 'qwen3'
-          ? await transcribeWithQwen3(audioBlob, store.qwenAsrEndpoint)
-          : await transcribeWithWhisperX(audioBlob, store.whisperxEndpoint, {
-              diarize: note.mode === 'meeting' || note.mode === 'interview',
-            });
-      } catch (primaryErr) {
-        setFeedbackMsg({ text: `⚠️ ${engine} 失败，尝试 ${fallbackEngine}...`, type: 'error' });
-        try {
-          wxResult = fallbackEngine === 'qwen3'
-            ? await transcribeWithQwen3(audioBlob, store.qwenAsrEndpoint)
-            : await transcribeWithWhisperX(audioBlob, store.whisperxEndpoint, {
-                diarize: note.mode === 'meeting' || note.mode === 'interview',
-              });
-        } catch {
-          throw primaryErr;
-        }
-      }
-
-      const segments = wxResult.segments.map(s => ({ start: s.start, end: s.end, text: s.text, speaker: s.speaker }));
-      const speakers = new Set(segments.map(s => s.speaker).filter(Boolean));
-      const fullText = segmentsToTranscript(segments);
-      updateNote(id, { content: fullText, segments, speakerCount: speakers.size, language: wxResult.language });
-
-      // Step 3: LLM Summary
-      const { getSharedLLMConfig } = await import('@/services/shared-config');
-      const llmConfig = await getSharedLLMConfig();
-      if (llmConfig.apiEndpoint && llmConfig.apiKey) {
-        setFeedbackMsg({ text: '✨ AI 正在生成摘要...', type: 'success' });
-        try {
-          const aiResult = await summarizeWithLLM(fullText, (note.mode as AITemplate) || 'auto', llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel);
-          updateNote(id, { title: aiResult.title, summary: aiResult.summary, keyPoints: aiResult.keyPoints, actionItems: aiResult.actionItems, isProcessing: false, updatedAt: new Date() });
-        } catch {
-          updateNote(id, { title: segments[0]?.text?.slice(0, 30) || '语音笔记', summary: fullText.slice(0, 200), isProcessing: false, updatedAt: new Date() });
-        }
-      } else {
-        updateNote(id, { title: segments[0]?.text?.slice(0, 30) || '语音笔记', summary: fullText.slice(0, 200), isProcessing: false, updatedAt: new Date() });
-      }
-
-      setFeedbackMsg({ text: '✅ 重新转录完成', type: 'success' });
-      setTimeout(() => setFeedbackMsg(null), 4000);
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : '未知错误';
-      setFeedbackMsg({ text: `❌ 转录失败: ${errMsg}`, type: 'error' });
-      setTimeout(() => setFeedbackMsg(null), 8000);
-    }
-    setIsRetranscribing(false);
-  };
-
   return (
     <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-10">
-
 
       {/* Feedback Toast */}
       {feedbackMsg && (
@@ -379,13 +302,7 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
                 <div className="relative">
                   <div className="flex items-center">
                     <button
-                      onClick={() => {
-                        if (note.translatedContent || note.translatedSegments) {
-                          setShowTranslated(!showTranslated);
-                        } else {
-                          setShowTranslateMenu(!showTranslateMenu);
-                        }
-                      }}
+                      onClick={toggleTranslation}
                       disabled={isTranslating}
                       className="flex items-center gap-1.5 px-2.5 py-1 rounded-l-lg text-[10px] font-medium text-[var(--color-text-tertiary)] bg-[var(--color-bg-surface)] hover:text-[var(--color-tag-blue)] hover:bg-[var(--color-tag-blue)]/10 transition-all cursor-pointer disabled:opacity-50"
                       title={(note.translatedContent || note.translatedSegments) ? (showTranslated ? '查看原文' : '查看翻译') : '选择翻译语言'}
@@ -405,56 +322,10 @@ export default function NoteDetailPage({ params }: { params: Promise<{ id: strin
                   {/* Language dropdown */}
                   {showTranslateMenu && (
                     <div className="absolute right-0 top-full mt-1 z-50 w-36 py-1 rounded-xl bg-[var(--color-bg-card)] border border-white/10 shadow-2xl backdrop-blur-xl">
-                      {[
-                        { code: 'zh', label: '🇨🇳 中文' },
-                        { code: 'en', label: '🇺🇸 English' },
-                        { code: 'ja', label: '🇯🇵 日本語' },
-                        { code: 'ko', label: '🇰🇷 한국어' },
-                        { code: 'fr', label: '🇫🇷 Français' },
-                        { code: 'de', label: '🇩🇪 Deutsch' },
-                        { code: 'es', label: '🇪🇸 Español' },
-                        { code: 'it', label: '🇮🇹 Italiano' },
-                        { code: 'pt', label: '🇧🇷 Português' },
-                        { code: 'ru', label: '🇷🇺 Русский' },
-                        { code: 'ar', label: '🇸🇦 العربية' },
-                      ].map(lang => (
+                      {TRANSLATE_LANGUAGES.map(lang => (
                         <button
                           key={lang.code}
-                          onClick={async () => {
-                            setShowTranslateMenu(false);
-                            setIsTranslating(true);
-                            setFeedbackMsg({ text: `🌐 正在翻译为 ${lang.label.slice(4)}...`, type: 'success' });
-                            try {
-                              const { translateTranscript, translateSegments } = await import('@/services/ai-service');
-                              const { getSharedLLMConfig } = await import('@/services/shared-config');
-                              const llmConfig = await getSharedLLMConfig();
-                              if (!llmConfig.apiEndpoint || !llmConfig.apiKey) {
-                                throw new Error('请先在设置中配置 LLM API');
-                              }
-                              if (isMultiSpeaker && hasSegments) {
-                                const translatedSegs = await translateSegments(
-                                  note.segments, lang.code,
-                                  llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel
-                                );
-                                const { segmentsToTranscript } = await import('@/services/ai-service');
-                                const translatedText = segmentsToTranscript(translatedSegs);
-                                updateNote(id, { translatedSegments: translatedSegs, translatedContent: translatedText, targetLanguage: lang.code });
-                              } else {
-                                const translated = await translateTranscript(
-                                  note.content, lang.code,
-                                  llmConfig.apiEndpoint, llmConfig.apiKey, llmConfig.selectedModel
-                                );
-                                updateNote(id, { translatedContent: translated, targetLanguage: lang.code });
-                              }
-                              setShowTranslated(true);
-                              setFeedbackMsg({ text: '✅ 翻译完成', type: 'success' });
-                              setTimeout(() => setFeedbackMsg(null), 3000);
-                            } catch (err) {
-                              setFeedbackMsg({ text: `❌ 翻译失败: ${err instanceof Error ? err.message : '未知错误'}`, type: 'error' });
-                              setTimeout(() => setFeedbackMsg(null), 5000);
-                            }
-                            setIsTranslating(false);
-                          }}
+                          onClick={() => translateTo(lang.code, lang.label.slice(4))}
                           className={`w-full text-left px-3 py-1.5 text-xs transition-colors cursor-pointer hover:bg-[var(--color-tag-blue)]/10 ${
                             note.targetLanguage === lang.code ? 'text-[var(--color-tag-blue)] font-medium' : 'text-[var(--color-text-secondary)]'
                           }`}
