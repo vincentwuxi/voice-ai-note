@@ -14,11 +14,19 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
+  // All hooks must be called before any conditional returns (Rules of Hooks)
   useEffect(() => {
     if (!isChecked) {
       fetchUser();
     }
   }, [isChecked, fetchUser]);
+
+  // Redirect to login if not authenticated
+  useEffect(() => {
+    if (isChecked && !isLoading && !user && pathname !== '/login' && !pathname.startsWith('/share/')) {
+      router.replace('/login');
+    }
+  }, [isChecked, isLoading, user, pathname, router]);
 
   // Don't guard public pages
   if (pathname === '/login' || pathname.startsWith('/share/')) {
@@ -36,13 +44,6 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-
-  // Not authenticated → redirect to login
-  useEffect(() => {
-    if (isChecked && !isLoading && !user && pathname !== '/login' && !pathname.startsWith('/share/')) {
-      router.replace('/login');
-    }
-  }, [isChecked, isLoading, user, pathname, router]);
 
   if (!user) {
     return null;
